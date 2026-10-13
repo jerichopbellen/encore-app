@@ -50,3 +50,7 @@ temp/
 *.backup
 *.sql.gz
 
+**/.agents/
+**/.claude/
+**/.windsurf/
+**/skills-lock.json

@@ -1,2 +1,11 @@
-// Event workflows will be implemented after the database model queries are reviewed.
-module.exports = {}
+const eventModel = require('../models/Event')
+
+function listPublishedEvents() {
+  return eventModel.findPublishedEvents()
+}
+
+function getPublishedEventById(id) {
+  return eventModel.findPublishedEventById(id)
+}
+
+module.exports = { listPublishedEvents, getPublishedEventById }
