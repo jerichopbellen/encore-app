@@ -7,10 +7,12 @@ const bookingRoutes = require('./routes/bookingRoutes')
 const adminRoutes = require('./routes/adminRoutes')
 const notFoundMiddleware = require('./middleware/notFoundMiddleware')
 const errorMiddleware = require('./middleware/errorMiddleware')
+const cookieParser = require('cookie-parser')
 
 const app = express()
 
 app.use(express.json())
+app.use(cookieParser())
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({
