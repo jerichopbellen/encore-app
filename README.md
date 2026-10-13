@@ -4,79 +4,139 @@
 
 Encore is a full-stack web application inspired by event ticketing platforms such as Ticketmaster. It is designed to let users discover events, explore ticket types, reserve tickets, and manage their bookings.
 
-The project focuses on full-stack development, backend architecture, database integrity, and the challenges of managing limited inventory when multiple users attempt to book tickets simultaneously.
+This personal portfolio project focuses on full-stack development, backend architecture, relational database design, and the challenges of managing limited ticket inventory when multiple users attempt to book tickets simultaneously.
+
+The long-term goal is to build a complete booking workflow while exploring database transactions, idempotency, concurrency, and race conditions.
 
 ## Project Goals
 
-- Build an event discovery and ticket booking platform.
-- Develop a full-stack application using React, Node.js, Express, and PostgreSQL.
-- Design RESTful APIs and maintain a clear separation of backend responsibilities.
+- Build a complete event discovery and ticket booking platform.
+- Develop a full-stack application with a React frontend and a Node.js backend.
+- Design RESTful APIs with a clear separation of responsibilities.
+- Use an ORM to model relational data and simplify database access.
 - Implement authentication and role-based authorization.
 - Manage ticket inventory, reservations, and booking confirmation.
 - Use database transactions and idempotency to maintain data consistency.
-- Explore race conditions and concurrency through realistic ticket booking scenarios.
-- Develop a maintainable application suitable for a software development portfolio.
+- Explore race conditions and concurrency through realistic ticket-booking scenarios.
+- Build a maintainable application that demonstrates practical software engineering skills.
 
 ## Technology Stack
 
 ### Frontend
-- React
-- Vite
-- React Router
+
+- **React** — component-based user interface
+- **Vite** — frontend development server and build tooling
+- **React Router** — client-side routing
 
 ### Backend
-- Node.js
-- Express
-- `pg` — PostgreSQL driver
-- `dotenv` — environment variable management
+
+- **Node.js** — JavaScript runtime
+- **Express 5** — REST API and HTTP request handling
+- **Prisma ORM 7** — database client and structured data access
+- **`@prisma/adapter-pg`** — PostgreSQL driver adapter for Prisma
+- **`pg`** — PostgreSQL driver
+- **dotenv** — environment variable management
 
 ### Database
-- PostgreSQL 18
+
+- **PostgreSQL 18** — relational database for users, events, ticket inventory, reservations, and bookings
+
+### Development Tools
+
+- **Git and GitHub** — version control, remote repository hosting, and feature-based development
+- **Prisma CLI** — schema validation, database introspection, and client generation
+
+## Architecture
+
+Encore separates the frontend, API, application logic, and database access into distinct layers.
+
+```text
+React Frontend
+      |
+      | HTTP / REST API
+      v
+Express Routes
+      |
+      v
+Controllers
+      |
+      v
+Services
+      |
+      v
+Prisma Client
+      |
+      | PostgreSQL driver adapter
+      v
+PostgreSQL Database
+```
+
+The frontend communicates with the backend through HTTP requests and does not connect directly to PostgreSQL.
+
+The backend uses a layered architecture:
+
+- **Routes** map HTTP methods and paths to controller handlers.
+- **Controllers** handle incoming requests and construct HTTP responses.
+- **Services** coordinate application logic and business rules.
+- **Models** organize database access through Prisma.
+- **Middleware** handles shared request processing, authentication, authorization, and errors.
+- **Validators** validate request parameters and payloads.
+- **Utilities** provide reusable helpers and error-handling functionality.
+
+The Express application uses CommonJS, while Prisma 7's generated client uses ES modules. The Prisma client is initialized lazily and shared through a singleton, allowing the application to initialize database access when needed.
 
 ## Project Structure
 
 ```text
-encore/
+encore-app/
 ├── client/
 │   ├── public/
 │   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   ├── utils/
+│   │   ├── App.jsx
+│   │   └── App.css
 │   └── package.json
 ├── server/
+│   ├── prisma/
+│   │   └── schema.prisma
 │   ├── src/
 │   │   ├── config/
-│   │   ├── db/
+│   │   ├── controllers/
+│   │   ├── middleware/
 │   │   ├── models/
 │   │   ├── routes/
-│   │   ├── controllers/
 │   │   ├── services/
-│   │   ├── middleware/
-│   │   ├── validators/
 │   │   ├── utils/
+│   │   ├── validators/
 │   │   ├── app.js
 │   │   └── server.js
+│   ├── prisma7.config.ts
+│   ├── .env.example
 │   └── package.json
-├── tests/
 ├── .gitignore
 └── README.md
 ```
 
-The backend is organized into separate layers to keep HTTP handling, business logic, validation, and database access maintainable.
-
 ## Database Design
 
-The PostgreSQL database is named `encore` and uses a relational schema consisting of seven tables.
+Encore uses PostgreSQL with a relational schema consisting of seven tables.
 
 | Table | Responsibility |
 |---|---|
 | `users` | Customer and administrator accounts |
 | `events` | Event details and publication status |
 | `ticket_types` | Ticket categories, prices, and inventory |
-| `reservations` | Temporary ticket holds |
+| `reservations` | Temporary ticket holds and reservation status |
 | `reservation_items` | Ticket quantities and reserved prices |
 | `bookings` | Confirmed booking records |
-| `idempotency_keys` | Support for safely retrying selected operations |
+| `idempotency_keys` | Information used to safely retry supported operations |
 
-The schema uses UUID identifiers, foreign keys, unique constraints, and check constraints. Application-level validation and database transactions complement these constraints to maintain data integrity.
+The schema uses UUID identifiers, foreign keys, unique constraints, database defaults, and check constraints to protect data integrity.
+
+Prisma provides the application with a structured way to query and work with relational data. Its schema represents the existing PostgreSQL tables, while PostgreSQL remains responsible for enforcing database-level constraints, including check constraints that Prisma does not fully represent in its generated client.
 
 ## Getting Started
 
@@ -86,7 +146,14 @@ The schema uses UUID identifiers, foreign keys, unique constraints, and check co
 - PostgreSQL 18 or a compatible PostgreSQL installation
 - Git
 
-### 1. Install frontend dependencies
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/jerichopbellen/encore-app.git
+cd encore-app
+```
+
+### 2. Install frontend dependencies
 
 From the project root:
 
@@ -95,152 +162,170 @@ cd client
 npm install
 ```
 
-### 2. Install backend dependencies
+### 3. Install backend dependencies
 
-Open a separate terminal:
+Open another terminal from the project root:
 
 ```bash
 cd server
 npm install
 ```
 
-### 3. Configure environment variables
+### 4. Configure environment variables
 
-Create a `server/.env` file with your local configuration:
+Create a local `server/.env` file using `server/.env.example` as a reference.
+
+Configure your local PostgreSQL connection using the appropriate host, port, database name, username, and password. Prisma 7 also requires a `DATABASE_URL`.
+
+Example:
 
 ```dotenv
-PORT=5000
-NODE_ENV=development
-
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=encore
-DB_USER=postgres
-DB_PASSWORD=your_local_postgres_password
-
-CLIENT_ORIGIN=http://localhost:5173
+DATABASE_URL="postgresql://your_user:your_url_encoded_password@localhost:5432/encore?schema=public"
 ```
 
-Replace the password placeholder with your local PostgreSQL password. Add authentication secrets as needed by the application.
+Replace the placeholders with your own local configuration. Reserved characters in credentials must be URL-encoded where necessary.
 
 Never commit actual credentials or secrets to version control.
 
-### 4. Prepare the database
+### 5. Prepare the database and Prisma Client
 
-Create a PostgreSQL database named `encore` and apply the project's schema.
+Create the `encore` database and prepare its tables using the project's database schema.
 
-A reproducible schema or database migration workflow can be used to help other developers set up the database consistently.
+For an existing database, Prisma can introspect the current schema and generate a client from it. From the `server/` directory, run:
 
-### 5. Start the backend
+```bash
+npx prisma validate --config prisma7.config.ts
+npx prisma db pull --config prisma7.config.ts
+npx prisma generate --config prisma7.config.ts
+```
 
-From the `server/` directory:
+`db pull` updates the local Prisma schema based on the connected database; it does not apply schema changes to PostgreSQL. Confirm the connection points to the intended database before running database commands.
+
+### 6. Start the backend
+
+From `server/`:
 
 ```bash
 npm start
 ```
 
-The backend runs at:
+The API runs at:
 
 `http://localhost:5000`
 
-### 6. Start the frontend
+The health endpoint is available at:
 
-From the `client/` directory:
+`http://localhost:5000/api/health`
+
+### 7. Start the frontend
+
+From `client/`:
 
 ```bash
 npm run dev
 ```
 
-Vite typically serves the frontend at:
+Vite typically serves the application at:
 
 `http://localhost:5173`
 
-The React frontend communicates with the backend through HTTP APIs. It does not connect directly to PostgreSQL.
+The Vite development server proxies `/api` requests to the Express backend.
 
 ## API Overview
 
-Encore's API is organized around event discovery, authentication, reservations, bookings, and administration.
+Encore's REST API is organized into separate resource groups for health checks, event discovery, authentication, reservations, bookings, and administration.
 
-### Health Check
+### Health API
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/health` | Check API availability |
+| GET | `/api/health` | Check whether the API is running |
 
-### Events
+### Event APIs
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/events` | List published events |
-| GET | `/api/events/:eventId` | Retrieve event details and ticket types |
+| GET | `/api/events` | Retrieve published events |
+| GET | `/api/events/:eventId` | Retrieve a published event and its ticket types |
 
-### Authentication
+### Authentication APIs
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
 | POST | `/api/auth/register` | Register a customer |
 | POST | `/api/auth/login` | Authenticate a customer |
-| GET | `/api/auth/me` | Retrieve the authenticated user's profile |
+| GET | `/api/auth/me` | Retrieve the current user's profile |
 
-### Reservations
+### Reservation APIs
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/reservations` | Create a temporary ticket reservation |
+| POST | `/api/reservations` | Create a ticket reservation |
 | GET | `/api/reservations/:reservationId` | Retrieve a reservation |
-| POST | `/api/reservations/:reservationId/cancel` | Cancel a pending reservation |
-| POST | `/api/reservations/:reservationId/checkout` | Initiate simulated checkout and booking confirmation |
+| POST | `/api/reservations/:reservationId/cancel` | Cancel a reservation |
+| POST | `/api/reservations/:reservationId/checkout` | Initiate checkout for a reservation |
 
-### Bookings
+### Booking APIs
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/bookings` | List the authenticated user's bookings |
+| GET | `/api/bookings` | Retrieve bookings |
 | GET | `/api/bookings/:bookingId` | Retrieve a specific booking |
 
-### Administration
+### Administration APIs
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
 | POST | `/api/admin/events` | Create an event |
 | PATCH | `/api/admin/events/:eventId` | Update event details |
-| PATCH | `/api/admin/events/:eventId/status` | Publish or cancel an event |
+| PATCH | `/api/admin/events/:eventId/status` | Update an event's status |
 | POST | `/api/admin/events/:eventId/ticket-types` | Create ticket types |
 
-## Backend Architecture
+These tables document the API's route organization. Individual workflows may require further implementation, authentication, authorization, and testing before they are ready for use.
 
-The backend follows a layered architecture:
-
-- **Routes:** Map HTTP methods and paths to controller handlers.
-- **Controllers:** Handle HTTP requests and responses.
-- **Services:** Coordinate business rules and application workflows.
-- **Models:** Encapsulate SQL queries and database access.
-- **Middleware:** Handle shared request processing, authentication, authorization, and errors.
-- **Validators:** Validate request parameters and payloads.
-- **Utilities:** Provide reusable helpers and error-handling functionality.
-
-The application uses PostgreSQL through `pg` and parameterized SQL rather than MongoDB or Mongoose.
+Successful API responses use a consistent JSON structure with a `success` field and a `data` or `message` field, as appropriate.
 
 ## Engineering Concepts
 
 ### Database Transactions
-Ensure related changes to reservations, ticket inventory, and bookings succeed or fail together when required.
+
+Keep related changes to reservations, ticket inventory, and bookings consistent by committing them together or rolling them back when necessary.
 
 ### Inventory Management
+
 Prevent overselling when multiple customers attempt to reserve the same tickets.
 
 ### Concurrency and Race Conditions
-Explore atomic SQL updates, row locking, transaction isolation, and concurrent requests.
+
+Explore atomic updates, row locking, transaction isolation, and simultaneous requests to understand how competing operations affect shared inventory.
 
 ### Idempotency
-Make supported retries safe so repeated requests do not unintentionally create duplicate bookings or repeat inventory changes.
+
+Make supported retries safe so repeated requests do not unintentionally create duplicate bookings or apply the same inventory change more than once.
 
 ### Security
-Apply password hashing, authentication, authorization, request validation, and safe error handling.
+
+Apply password hashing, authentication, role-based authorization, request validation, and safe error handling.
 
 ### Testing
-Use automated tests to examine normal operations, invalid requests, inventory limits, reservation cancellation, duplicate requests, and concurrent booking attempts.
+
+Test successful requests, invalid inputs, missing records, inventory limits, reservation cancellation and expiration, duplicate requests, and concurrent booking attempts.
+
+## Development Workflow
+
+Encore is developed incrementally using Git feature branches to keep changes organized.
+
+The workflow is:
+
+1. Create a feature branch from the updated `main` branch.
+2. Implement and test the feature locally.
+3. Commit related changes with descriptive commit messages.
+4. Push the branch to GitHub.
+5. Open a pull request to review the changes.
+6. Merge the feature into `main` after verification.
+
+This workflow keeps the main branch organized and makes it easier to review changes, isolate bugs, and maintain a clear project history.
 
 ## Learning Objective
 
-Encore aims to demonstrate not only full-stack development skills, but also an understanding of how backend systems preserve correctness when multiple users compete for limited ticket inventory.
+Encore is intended to demonstrate more than the ability to build a full-stack CRUD application. Its primary learning objective is to develop a practical understanding of how a backend system maintains data integrity and reliability when multiple users compete for limited resources.
