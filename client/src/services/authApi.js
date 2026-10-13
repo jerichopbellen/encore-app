@@ -29,6 +29,13 @@ export function getCurrentUser() {
   return requestAuthApi('/me')
 }
 
+export function updateCurrentUser(profile) {
+  return requestAuthApi('/me', {
+    method: 'PATCH',
+    body: JSON.stringify(profile),
+  })
+}
+
 export function login(credentials) {
   return requestAuthApi('/login', {
     method: 'POST',

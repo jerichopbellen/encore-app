@@ -243,3 +243,53 @@ button.button-link { border: 0; cursor: pointer; }
 @media (max-width: 600px) {
   .auth-page { margin: 12px auto; padding: 24px 20px; }
 }
+
+/* My profile */
+.profile-page { max-width: 760px; margin: 18px auto 8px; }
+.profile-page__heading { margin-bottom: 30px; }
+.profile-page h1 { margin: 10px 0 8px; color: #f7f5fb; font-size: clamp(2.2rem, 7vw, 3.5rem); line-height: 1.05; letter-spacing: -.045em; }
+.profile-page__intro { margin: 0; color: #aaa6b5; line-height: 1.6; }
+.profile-card { display: grid; gap: 24px; padding: clamp(22px, 4vw, 34px); border: 1px solid #34313e; border-radius: 16px; background: linear-gradient(145deg, #1c1a24, #17161d 72%); box-shadow: 0 18px 48px rgba(0, 0, 0, .16); }
+.profile-card__identity { display: flex; align-items: center; min-width: 0; gap: 18px; }
+.profile-avatar { display: grid; width: 68px; height: 68px; flex: 0 0 68px; place-items: center; border: 1px solid rgba(196, 181, 253, .35); border-radius: 50%; background: radial-gradient(circle at 30% 20%, #a78bfa, #6841ae 72%); color: #fff; font-size: 1.25rem; font-weight: 750; letter-spacing: .04em; box-shadow: 0 0 0 5px rgba(139, 92, 246, .09); }
+.profile-card__identity-copy { min-width: 0; }
+.profile-card__label { margin: 0 0 5px; color: #b8a5ee; font-size: .74rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.profile-card__identity h2 { margin: 0; color: #f7f5fb; font-size: clamp(1.25rem, 3vw, 1.75rem); line-height: 1.25; overflow-wrap: anywhere; }
+.profile-card__divider { height: 1px; background: linear-gradient(90deg, #4b435e, #34313e 55%, transparent); }
+.profile-card__details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.profile-field { display: grid; align-content: start; min-width: 0; gap: 9px; padding: 16px 18px; border: 1px solid #302d39; border-radius: 10px; background: rgba(12, 11, 17, .38); }
+.profile-field__label { color: #9995a4; font-size: .79rem; font-weight: 600; }
+.profile-field__value { min-width: 0; margin: 0; color: #f1eef7; font-size: .98rem; line-height: 1.5; overflow-wrap: anywhere; }
+.profile-form { display: grid; gap: 18px; margin-top: 0; }
+.profile-form .profile-card__details { align-items: stretch; }
+.profile-form .profile-field { color: #e8e4f0; font-size: .9rem; font-weight: 600; }
+.profile-form .profile-field input { font-weight: 400; }
+.profile-page__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 11px; }
+.profile-page__actions button:disabled { cursor: wait; opacity: .68; }
+.profile-page__save { min-width: 138px; border: 0; cursor: pointer; box-shadow: 0 5px 16px rgba(139, 92, 246, .2); }
+.profile-page__save:hover:not(:disabled), .profile-page__edit:hover { background: #7c3aed; }
+.profile-page__cancel { padding: 10px 15px; border: 1px solid #514767; border-radius: 8px; background: transparent; color: #e8e4f0; cursor: pointer; transition: border-color .18s ease, background .18s ease; }
+.profile-page__cancel:hover:not(:disabled) { border-color: #a78bfa; background: rgba(167, 139, 250, .08); }
+.profile-page__edit { justify-self: start; padding-right: 19px; padding-left: 19px; box-shadow: 0 5px 16px rgba(139, 92, 246, .16); }
+.profile-page__message { margin: 0; }
+.profile-page__back { display: inline-block; margin-top: 20px; color: #c4b5fd; text-decoration: none; }
+.profile-page__back:hover { color: #fff; }
+.profile-state { max-width: 760px; margin: 20px auto; padding: 22px; border: 1px solid #2b2934; border-radius: 12px; background: #191820; color: #aaa6b5; }
+.navbar__links .navbar__profile--active { padding: 9px 12px; border: 1px solid rgba(167, 139, 250, .35); border-radius: 8px; background: rgba(139, 92, 246, .12); color: #d7c8ff; }
+.navbar__links .navbar__profile--active:hover { color: #fff; }
+.navbar__links a:focus-visible, .navbar__logout:focus-visible, .profile-page button:focus-visible, .profile-page__back:focus-visible { outline: 3px solid #c4b5fd; outline-offset: 3px; }
+
+@media (max-width: 700px) {
+  .profile-page { margin-top: 8px; }
+  .profile-page__heading { margin-bottom: 24px; }
+  .profile-card { gap: 20px; }
+  .profile-avatar { width: 60px; height: 60px; flex-basis: 60px; }
+}
+
+@media (max-width: 520px) {
+  .profile-card__details { grid-template-columns: minmax(0, 1fr); gap: 11px; }
+  .profile-field { padding: 14px 15px; }
+  .profile-card__identity { gap: 15px; }
+  .profile-page__actions { align-items: stretch; }
+  .profile-page__actions button { flex: 1; }
+}
