@@ -1,5 +1,5 @@
 
-import { Link } from 'react-router'
+import { Link, NavLink } from 'react-router'
 import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -28,6 +28,13 @@ function Navbar() {
           {isLoading ? <span className="navbar__session">Checking session…</span> : user ? (
             <>
               <span className="navbar__session">Hi, {user.name}</span>
+              <NavLink
+                to="/profile"
+                end
+                className={({ isActive }) => isActive ? 'navbar__profile navbar__profile--active' : 'navbar__profile'}
+              >
+                My Profile
+              </NavLink>
               <button className="navbar__logout" type="button" onClick={handleLogout}>Log out</button>
             </>
           ) : (
