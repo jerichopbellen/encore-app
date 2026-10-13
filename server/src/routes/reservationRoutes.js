@@ -1,10 +1,13 @@
 const express = require('express')
 const reservationController = require('../controllers/reservationController')
+const { requireAuthentication } = require('../middleware/authMiddleware')
 
 const router = express.Router()
 
-// These routes are not protected yet; authentication is not implemented.
+router.use(requireAuthentication)
+
 router.post('/', reservationController.createReservation)
+router.get('/', reservationController.listReservations)
 router.get('/:reservationId', reservationController.getReservation)
 router.post('/:reservationId/cancel', reservationController.cancelReservation)
 router.post('/:reservationId/checkout', reservationController.checkoutReservation)

@@ -1,5 +1,6 @@
 const AppError = require('../utils/AppError')
 const eventService = require('../services/eventService')
+const reservationService = require('../services/reservationService')
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -22,6 +23,7 @@ function serializeEvent(event) {
 }
 
 async function listEvents(req, res) {
+  await reservationService.releaseExpiredReservations()
   const events = await eventService.listPublishedEvents()
 
   return res.status(200).json({
@@ -37,6 +39,7 @@ async function getEvent(req, res) {
     throw new AppError('Event ID must be a valid UUID.', 400)
   }
 
+  await reservationService.releaseExpiredReservations()
   const event = await eventService.getPublishedEventById(eventId)
 
   if (!event) {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { getEvent } from '../../services/eventsApi'
 import { formatEventDate, formatPrice, getStartingPrice } from '../../utils/eventDisplay'
+import EventReservationPanel from '../../components/events/EventReservationPanel'
 
 function EventDetails() {
   const { id } = useParams()
@@ -111,6 +112,7 @@ function EventDetails() {
             ))}
           </ul>}
       </section>
+      <EventReservationPanel key={event.id} event={event} />
     </article>
   )
 }

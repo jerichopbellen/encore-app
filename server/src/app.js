@@ -23,7 +23,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/events', eventRoutes)
 app.use('/api/auth', authRoutes)
-// Reservation routes are not protected yet; do not treat them as secure.
+// All reservation routes require an authenticated Encore session.
 app.use('/api/reservations', reservationRoutes)
 // Booking routes are not protected yet; do not treat them as secure.
 app.use('/api/bookings', bookingRoutes)
