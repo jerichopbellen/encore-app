@@ -1,8 +1,44 @@
-const notImplemented = require('../utils/notImplemented')
+const AppError = require('../utils/AppError')
+const reservationService = require('../services/reservationService')
+const {
+  normalizeReservationInput,
+  validateReservationId,
+} = require('../validators/reservationValidator')
 
-function createReservation(req, res) { return notImplemented(res, 'Creating a reservation') }
-function getReservation(req, res) { return notImplemented(res, 'Getting a reservation') }
-function cancelReservation(req, res) { return notImplemented(res, 'Cancelling a reservation') }
-function checkoutReservation(req, res) { return notImplemented(res, 'Checking out a reservation') }
+async function createReservation(req, res) {
+  const input = normalizeReservationInput(req.body)
+  const reservation = await reservationService.createReservation(req.user.id, input)
+  return res.status(201).json({ success: true, data: { reservation } })
+}
 
-module.exports = { createReservation, getReservation, cancelReservation, checkoutReservation }
+async function listReservations(req, res) {
+  const reservations = await reservationService.listReservations(req.user.id)
+  return res.status(200).json({ success: true, data: reservations })
+}
+
+async function getReservation(req, res) {
+  validateReservationId(req.params.reservationId)
+  const reservation = await reservationService.getReservationForUser(req.user.id, req.params.reservationId)
+  if (!reservation) throw new AppError('Reservation not found.', 404)
+  return res.status(200).json({ success: true, data: { reservation } })
+}
+
+async function cancelReservation(req, res) {
+  validateReservationId(req.params.reservationId)
+  const result = await reservationService.cancelReservation(req.user.id, req.params.reservationId)
+  if (result.outcome === 'not-found') throw new AppError('Reservation not found.', 404)
+  if (result.outcome === 'expired') throw new AppError('This reservation has expired.', 409)
+  if (result.outcome === 'not-pending') {
+    throw new AppError('Only a pending reservation can be cancelled.', 409)
+  }
+  return res.status(200).json({ success: true, data: { reservation: result.reservation } })
+}
+
+function checkoutReservation(req, res) {
+  return res.status(501).json({
+    success: false,
+    message: 'Checkout is not available yet.',
+  })
+}
+
+module.exports = { createReservation, listReservations, getReservation, cancelReservation, checkoutReservation }

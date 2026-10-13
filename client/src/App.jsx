@@ -6,6 +6,7 @@ import EventList from './pages/events/EventList'
 import EventDetails from './pages/events/EventDetails'
 import AuthPage from './pages/auth/AuthPage'
 import ProfilePage from './pages/profile/ProfilePage'
+import ReservationsPage from './pages/reservations/ReservationsPage'
 import './App.css'
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
           <Route path="/login" element={<AuthPage key="login" mode="login" />} />
           <Route path="/register" element={<AuthPage key="register" mode="register" />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/reservations" element={<ReservationsPage />} />
 
           {/* Temporary fallback until we add more routes. */}
           <Route path="*" element={<Navigate to="/" replace />} />
