@@ -45,4 +45,19 @@ function normalizeLoginInput(body = {}) {
   return { email: email.trim().toLowerCase(), password }
 }
 
-module.exports = { normalizeRegistrationInput, normalizeLoginInput }
+function normalizeProfileUpdateInput(body = {}) {
+  const { name } = body ?? {}
+
+  if (typeof name !== 'string' || !name.trim()) {
+    throw new AppError('Name is required.', 400)
+  }
+
+  const normalizedName = name.trim()
+  if (normalizedName.length > 100) {
+    throw new AppError('Name must be 100 characters or fewer.', 400)
+  }
+
+  return { name: normalizedName }
+}
+
+module.exports = { normalizeRegistrationInput, normalizeLoginInput, normalizeProfileUpdateInput }

@@ -22,5 +22,6 @@ router.post('/register', requireSameOrigin, authController.register)
 router.post('/login', requireSameOrigin, authController.login)
 router.post('/logout', requireSameOrigin, authController.logout)
 router.get('/me', requireAuthentication, authController.getCurrentUser)
+router.patch('/me', requireSameOrigin, requireAuthentication, authController.updateCurrentUser)
 
 module.exports = router

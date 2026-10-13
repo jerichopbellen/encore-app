@@ -2,7 +2,11 @@ const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const AppError = require('../utils/AppError')
 const authService = require('../services/authService')
-const { normalizeRegistrationInput, normalizeLoginInput } = require('../validators/authValidator')
+const {
+  normalizeRegistrationInput,
+  normalizeLoginInput,
+  normalizeProfileUpdateInput,
+} = require('../validators/authValidator')
 
 const COOKIE_NAME = 'encore_session'
 const JWT_ISSUER = 'encore-api'
@@ -89,9 +93,16 @@ async function getCurrentUser(req, res) {
   })
 }
 
+async function updateCurrentUser(req, res) {
+  const { name } = normalizeProfileUpdateInput(req.body)
+  const user = await authService.updateUserName(req.user.id, name)
+
+  return res.status(200).json({ success: true, data: { user } })
+}
+
 function logout(req, res) {
   res.clearCookie(COOKIE_NAME, getCookieOptions())
   return res.status(200).json({ success: true, message: 'You have been logged out.' })
 }
 
-module.exports = { register, login, getCurrentUser, logout }
+module.exports = { register, login, getCurrentUser, updateCurrentUser, logout }
