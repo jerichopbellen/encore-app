@@ -199,6 +199,16 @@
 .event-not-found { padding: 70px 0; }
 .event-not-found > p:not(.eyebrow) { margin-bottom: 22px; }
 .button-link { display: inline-block; padding: 11px 16px; border-radius: 8px; background: #8b5cf6; color: #fff; font-weight: 650; text-decoration: none; }
+button.button-link { border: 0; cursor: pointer; }
+.event-page-state { padding: 22px; border: 1px solid #2b2934; border-radius: 12px; background: #191820; color: #aaa6b5; line-height: 1.6; }
+.event-ticket-types { margin: 0 0 24px; }
+.event-ticket-types h2 { margin-bottom: 16px; color: #f7f5fb; font-size: 1.45rem; }
+.event-ticket-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.event-ticket { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border: 1px solid #34313e; border-radius: 12px; background: #191820; }
+.event-ticket h3 { margin: 0 0 4px; color: #f7f5fb; font-size: 1rem; }
+.event-ticket p { color: #aaa6b5; font-size: .85rem; }
+.event-ticket strong { color: #fff; white-space: nowrap; }
+.event-not-found .event-details__back { margin-left: 16px; }
 
 @media (max-width: 700px) {
   .catalogue__intro { padding: 18px 0 42px; }
@@ -207,4 +217,5 @@
   .event-details__hero { min-height: 240px; }
   .event-details__content { grid-template-columns: 1fr; gap: 24px; padding-top: 26px; }
   .catalogue__heading { align-items: center; }
+  .event-ticket { padding: 16px; }
 }
