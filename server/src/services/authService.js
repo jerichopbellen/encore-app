@@ -32,4 +32,13 @@ async function findSafeUserById(id) {
   })
 }
 
-module.exports = { registerUser, findUserByEmail, findSafeUserById }
+async function updateUserName(id, name) {
+  const prisma = await getPrismaClient()
+  return prisma.users.update({
+    where: { id },
+    data: { name },
+    select: safeUserFields,
+  })
+}
+
+module.exports = { registerUser, findUserByEmail, findSafeUserById, updateUserName }
