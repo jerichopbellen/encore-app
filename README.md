@@ -106,7 +106,6 @@ encore-app/
 │   │   ├── config/
 │   │   ├── controllers/
 │   │   ├── middleware/
-│   │   ├── models/
 │   │   ├── routes/
 │   │   ├── services/
 │   │   ├── utils/
@@ -173,17 +172,11 @@ npm install
 
 ### 4. Configure environment variables
 
-Create a local `server/.env` file using `server/.env.example` as a reference.
+Create a local `server/.env` file using `server/.env.example` as a reference. The backend and Prisma 7 use `DATABASE_URL` as the single PostgreSQL connection setting; local development expects PostgreSQL on port `5432` and the database named `encore`.
 
-Configure your local PostgreSQL connection using the appropriate host, port, database name, username, and password. Prisma 7 also requires a `DATABASE_URL`.
+`JWT_SECRET` is required and must be a random value at least 32 bytes long. `JWT_EXPIRES_IN` optionally sets the session lifetime (default `1d`), `FRONTEND_ORIGIN` optionally sets the browser Origin accepted for authentication changes (default `http://localhost:5173`), and `NODE_ENV=production` enables the Secure session cookie flag. The backend listens on port `5000`; the Vite frontend uses port `5173` and proxies `/api` to the backend.
 
-Example:
-
-```dotenv
-DATABASE_URL="postgresql://your_user:your_url_encoded_password@localhost:5432/encore?schema=public"
-```
-
-Replace the placeholders with your own local configuration. Reserved characters in credentials must be URL-encoded where necessary.
+The frontend does not need a local environment file with the default Vite proxy. Its optional `VITE_API_BASE_URL` setting is documented in `client/.env.example`; leave it empty for local development. If you set a database password containing reserved URL characters, URL-encode those characters in `DATABASE_URL`.
 
 Never commit actual credentials or secrets to version control.
 
