@@ -34,7 +34,6 @@ The long-term goal is to build a complete booking workflow while exploring datab
 - **Express 5** — REST API and HTTP request handling
 - **Prisma ORM 7** — database client and structured data access
 - **`@prisma/adapter-pg`** — PostgreSQL driver adapter for Prisma
-- **`pg`** — PostgreSQL driver
 - **dotenv** — environment variable management
 
 ### Database
@@ -77,8 +76,7 @@ The backend uses a layered architecture:
 
 - **Routes** map HTTP methods and paths to controller handlers.
 - **Controllers** handle incoming requests and construct HTTP responses.
-- **Services** coordinate application logic and business rules.
-- **Models** organize database access through Prisma.
+- **Services** coordinate application logic, business rules, and Prisma database queries.
 - **Middleware** handles shared request processing, authentication, authorization, and errors.
 - **Validators** validate request parameters and payloads.
 - **Utilities** provide reusable helpers and error-handling functionality.
@@ -101,9 +99,11 @@ encore-app/
 │   └── package.json
 ├── server/
 │   ├── prisma/
-│   │   └── schema.prisma
+│   │   ├── schema.prisma
+│   │   └── seed.js
 │   ├── src/
 │   │   ├── config/
+│   │   │   └── prisma.js
 │   │   ├── controllers/
 │   │   ├── middleware/
 │   │   ├── routes/
@@ -172,17 +172,31 @@ npm install
 
 ### 4. Configure environment variables
 
-Create a local `server/.env` file using `server/.env.example` as a reference. The backend and Prisma 7 use `DATABASE_URL` as the single PostgreSQL connection setting; local development expects PostgreSQL on port `5432` and the database named `encore`.
+Create a local `server/.env` file using `server/.env.example` as a reference. The backend and Prisma 7 use `DATABASE_URL` as the single PostgreSQL connection setting. Local development expects PostgreSQL on port `5432` and a database named `encore`.
 
-`JWT_SECRET` is required and must be a random value at least 32 bytes long. `JWT_EXPIRES_IN` optionally sets the session lifetime (default `1d`), `FRONTEND_ORIGIN` optionally sets the browser Origin accepted for authentication changes (default `http://localhost:5173`), and `NODE_ENV=production` enables the Secure session cookie flag. The backend listens on port `5000`; the Vite frontend uses port `5173` and proxies `/api` to the backend.
+The required environment variables are:
 
-The frontend does not need a local environment file with the default Vite proxy. Its optional `VITE_API_BASE_URL` setting is documented in `client/.env.example`; leave it empty for local development. If you set a database password containing reserved URL characters, URL-encode those characters in `DATABASE_URL`.
+- `DATABASE_URL` — PostgreSQL connection URL used by Prisma 7.
+- `JWT_SECRET` — session signing secret that must be at least 32 bytes long.
+
+The following variables are optional:
+
+- `JWT_EXPIRES_IN` — session lifetime; defaults to `1d`.
+- `FRONTEND_ORIGIN` — accepted frontend Origin for authentication changes; defaults to `http://localhost:5173`.
+- `NODE_ENV` — controls the Secure session-cookie flag in production.
+- `VITE_API_BASE_URL` — optional frontend API base URL.
+
+The backend listens on port `5000`, PostgreSQL uses port `5432`, and the Vite frontend typically uses port `5173`.
+
+The frontend does not need a local environment file for the default Vite proxy. When `VITE_API_BASE_URL` is unset or blank, the frontend uses relative `/api` requests, which Vite proxies to the Express backend.
+
+If your database password contains reserved URL characters, URL-encode those characters in `DATABASE_URL`.
 
 Never commit actual credentials or secrets to version control.
 
 ### 5. Prepare the database and Prisma Client
 
-Create the `encore` database and prepare its tables using the project's database schema.
+Create the `encore` database in PostgreSQL.
 
 For an existing database, Prisma can introspect the current schema and generate a client from it. From the `server/` directory, run:
 
@@ -192,7 +206,7 @@ npx prisma db pull --config prisma7.config.ts
 npx prisma generate --config prisma7.config.ts
 ```
 
-`db pull` updates the local Prisma schema based on the connected database; it does not apply schema changes to PostgreSQL. Confirm the connection points to the intended database before running database commands.
+`db pull` updates the local Prisma schema based on the connected database; it does not apply schema changes to PostgreSQL. Confirm that the connection points to the intended database before running database commands.
 
 ### 6. Start the backend
 
@@ -248,35 +262,40 @@ Encore's REST API is organized into separate resource groups for health checks, 
 | POST | `/api/auth/register` | Register a customer |
 | POST | `/api/auth/login` | Authenticate a customer |
 | GET | `/api/auth/me` | Retrieve the current user's profile |
+| PATCH | `/api/auth/me` | Update the current user's name |
+| POST | `/api/auth/logout` | End the current session |
 
 ### Reservation APIs
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/reservations` | Create a ticket reservation |
-| GET | `/api/reservations/:reservationId` | Retrieve a reservation |
-| POST | `/api/reservations/:reservationId/cancel` | Cancel a reservation |
-| POST | `/api/reservations/:reservationId/checkout` | Initiate checkout for a reservation |
+| POST | `/api/reservations` | Create a ticket reservation (authenticated) |
+| GET | `/api/reservations` | List the current user's reservations (authenticated) |
+| GET | `/api/reservations/:reservationId` | Retrieve one of the current user's reservations (authenticated) |
+| POST | `/api/reservations/:reservationId/cancel` | Cancel a pending reservation (authenticated) |
+| POST | `/api/reservations/:reservationId/checkout` | Checkout placeholder; not implemented yet (returns HTTP 501) |
+
+Reservation holds expire after 15 minutes. Expired holds are processed when relevant event or reservation endpoints are accessed; a separate background worker is not currently configured.
 
 ### Booking APIs
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/bookings` | Retrieve bookings |
-| GET | `/api/bookings/:bookingId` | Retrieve a specific booking |
+| GET | `/api/bookings` | Placeholder; listing bookings is not implemented yet |
+| GET | `/api/bookings/:bookingId` | Placeholder; retrieving a booking is not implemented yet |
 
 ### Administration APIs
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/admin/events` | Create an event |
-| PATCH | `/api/admin/events/:eventId` | Update event details |
-| PATCH | `/api/admin/events/:eventId/status` | Update an event's status |
-| POST | `/api/admin/events/:eventId/ticket-types` | Create ticket types |
+| POST | `/api/admin/events` | Placeholder; event creation is not implemented yet |
+| PATCH | `/api/admin/events/:eventId` | Placeholder; event updates are not implemented yet |
+| PATCH | `/api/admin/events/:eventId/status` | Placeholder; event status updates are not implemented yet |
+| POST | `/api/admin/events/:eventId/ticket-types` | Placeholder; ticket-type creation is not implemented yet |
 
-These tables document the API's route organization. Individual workflows may require further implementation, authentication, authorization, and testing before they are ready for use.
+Booking and administration routes are not protected by authentication and authorization middleware yet and should not be treated as secure, usable workflows.
 
-Successful API responses use a consistent JSON structure with a `success` field and a `data` or `message` field, as appropriate.
+Successful implemented API responses generally use a JSON structure with a `success` field and a `data` or `message` field, as appropriate. Placeholder endpoints may return a not-implemented response instead.
 
 ## Engineering Concepts
 
