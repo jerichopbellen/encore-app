@@ -64,84 +64,99 @@ function EventReservationPanel({ event }) {
         <span className="reservation-panel__hold">15 minute hold</span>
       </div>
 
-      {isLoading ? (
-        <p className="event-page-state" role="status">Checking your account…</p>
-      ) : !user ? (
-        <div className="reservation-panel__signed-out">
-          <p>Sign in to hold tickets for this event.</p>
-          <Link className="button-link" to="/login">Log in to continue</Link>
-        </div>
-      ) : reservation ? (
-        <div className="reservation-panel__success" role="status">
-          <p className="reservation-panel__success-title">Tickets reserved</p>
-          <p>
-            {reservation.items[0].quantity} × {reservation.items[0].ticket_name} for {formatPrice(reservation.total_amount)}.
-          </p>
-          <p className="reservation-panel__expiry">
-            Held until {new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(reservation.expires_at))}.
-          </p>
-          <Link to="/reservations">View my reservations</Link>
-        </div>
-      ) : event.ticket_types.length === 0 ? (
-        <p className="event-page-state">No ticket types are listed for this event yet.</p>
-      ) : (
-        <form className="reservation-form" onSubmit={handleSubmit}>
-          <label className="reservation-form__field">
-            Ticket type
-            <select
-              value={ticketType?.id || ''}
-              onChange={(changeEvent) => {
-                setTicketTypeId(changeEvent.target.value)
-                setQuantity('1')
-                setErrorMessage('')
-              }}
-              required
-            >
-              {event.ticket_types.map((ticket) => (
-                <option key={ticket.id} value={ticket.id}>
-                  {ticket.name}{ticket.available_quantity === 0 ? ' — Sold out' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="reservation-form__field">
-            Quantity
-            <input
-              type="number"
-              name="quantity"
-              min="1"
-              max={ticketType?.available_quantity || undefined}
-              step="1"
-              value={quantity}
-              onChange={(changeEvent) => {
-                setQuantity(changeEvent.target.value)
-                setErrorMessage('')
-              }}
-              required
-            />
-            {ticketType && (
-              <span className="reservation-form__hint">
-                {ticketType.available_quantity} available · {formatPrice(ticketType.price)} each
-              </span>
-            )}
-          </label>
-          <div className="reservation-summary" aria-live="polite">
-            <span>Estimated total</span>
-            <strong>{total}</strong>
+      <div className="reservation-panel__content">
+        {isLoading ? (
+          <p className="reservation-panel__message" role="status">Checking your account…</p>
+        ) : !user ? (
+          <div className="reservation-panel__signed-out">
+            <p>Sign in to hold tickets for this event.</p>
+            <Link className="button-link" to="/login">Log in to continue</Link>
           </div>
-          {errorMessage && <p className="auth-form__error" role="alert">{errorMessage}</p>}
-          <button
-            className="button-link reservation-form__submit"
-            type="submit"
-            disabled={isSubmitting || !ticketType || ticketType.available_quantity < 1}
-          >
-            {isSubmitting ? 'Reserving…' : ticketType?.available_quantity ? 'Reserve tickets' : 'Sold out'}
-          </button>
-          <p className="reservation-form__fineprint">
-            Your reservation temporarily holds inventory. Payment and checkout are not part of this step.
-          </p>
-        </form>
-      )}
+        ) : reservation ? (
+          <div className="reservation-panel__success" role="status">
+            <span className="reservation-panel__success-mark" aria-hidden="true">✓</span>
+            <div>
+              <p className="reservation-panel__success-title">Tickets reserved</p>
+              <p>
+                {reservation.items[0].quantity} × {reservation.items[0].ticket_name} for {formatPrice(reservation.total_amount)}.
+              </p>
+              <p className="reservation-panel__expiry">
+                Held until {new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(reservation.expires_at))}.
+              </p>
+              <Link to="/reservations">View my reservations</Link>
+            </div>
+          </div>
+        ) : event.ticket_types.length === 0 ? (
+          <p className="reservation-panel__message">No ticket types are listed for this event yet.</p>
+        ) : (
+          <form className="reservation-form" onSubmit={handleSubmit}>
+            <div className="reservation-form__fields">
+              <label className="reservation-form__field" htmlFor="reservation-ticket-type">
+                Ticket type
+                <select
+                  id="reservation-ticket-type"
+                  value={ticketType?.id || ''}
+                  onChange={(changeEvent) => {
+                    setTicketTypeId(changeEvent.target.value)
+                    setQuantity('1')
+                    setErrorMessage('')
+                  }}
+                  required
+                >
+                  {event.ticket_types.map((ticket) => (
+                    <option key={ticket.id} value={ticket.id}>
+                      {ticket.name}{ticket.available_quantity === 0 ? ' — Sold out' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="reservation-form__field" htmlFor="reservation-quantity">
+                Quantity
+                <input
+                  id="reservation-quantity"
+                  type="number"
+                  name="quantity"
+                  min="1"
+                  max={ticketType?.available_quantity || undefined}
+                  step="1"
+                  value={quantity}
+                  onChange={(changeEvent) => {
+                    setQuantity(changeEvent.target.value)
+                    setErrorMessage('')
+                  }}
+                  required
+                />
+              </label>
+            </div>
+            {ticketType && (
+              <div className="reservation-selection" aria-live="polite">
+                <span className="reservation-selection__name">{ticketType.name}</span>
+                <span>{formatPrice(ticketType.price)} per ticket</span>
+                <span>{ticketType.available_quantity} available</span>
+              </div>
+            )}
+            <div className="reservation-form__actions">
+              <div className="reservation-summary" aria-live="polite">
+                <span>Estimated total</span>
+                <strong>{total}</strong>
+              </div>
+              <button
+                className="button-link reservation-form__submit"
+                type="submit"
+                disabled={isSubmitting || !ticketType || ticketType.available_quantity < 1}
+              >
+                {isSubmitting ? 'Reserving…' : ticketType?.available_quantity ? 'Reserve tickets' : 'Sold out'}
+              </button>
+            </div>
+            {errorMessage && <p className="reservation-panel__error" role="alert">{errorMessage}</p>}
+          </form>
+        )}
+      </div>
+
+      <p className="reservation-panel__note">
+        <span className="reservation-panel__note-mark" aria-hidden="true">◷</span>
+        <span><strong>Temporary 15-minute hold.</strong> A reservation holds inventory only; payment and checkout are not available yet.</span>
+      </p>
     </section>
   )
 }
