@@ -25,7 +25,7 @@ app.use('/api/events', eventRoutes)
 app.use('/api/auth', authRoutes)
 // All reservation routes require an authenticated Encore session.
 app.use('/api/reservations', reservationRoutes)
-// Booking routes are not protected yet; do not treat them as secure.
+// Booking records are private to the authenticated customer who owns them.
 app.use('/api/bookings', bookingRoutes)
 // Admin routes are not protected yet; do not treat them as secure.
 app.use('/api/admin', adminRoutes)

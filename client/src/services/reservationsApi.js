@@ -41,6 +41,18 @@ export function getReservations() {
   return requestReservationsApi('')
 }
 
+export async function getReservation(reservationId) {
+  const data = await requestReservationsApi(`/${encodeURIComponent(reservationId)}`)
+  return data.reservation
+}
+
+export async function checkoutReservation(reservationId) {
+  const data = await requestReservationsApi(`/${encodeURIComponent(reservationId)}/checkout`, {
+    method: 'POST',
+  })
+  return data.booking
+}
+
 export function cancelReservation(reservationId) {
   return requestReservationsApi(`/${encodeURIComponent(reservationId)}/cancel`, {
     method: 'POST',

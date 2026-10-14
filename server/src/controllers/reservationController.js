@@ -1,5 +1,6 @@
 const AppError = require('../utils/AppError')
 const reservationService = require('../services/reservationService')
+const bookingService = require('../services/bookingService')
 const {
   normalizeReservationInput,
   validateReservationId,
@@ -34,11 +35,14 @@ async function cancelReservation(req, res) {
   return res.status(200).json({ success: true, data: { reservation: result.reservation } })
 }
 
-function checkoutReservation(req, res) {
-  return res.status(501).json({
-    success: false,
-    message: 'Checkout is not available yet.',
-  })
+async function checkoutReservation(req, res) {
+  validateReservationId(req.params.reservationId)
+  const result = await bookingService.checkoutReservation(req.user.id, req.params.reservationId)
+  if (result.outcome === 'not-found') throw new AppError('Reservation not found.', 404)
+  if (result.outcome === 'not-pending') {
+    throw new AppError('This reservation is no longer available for checkout.', 409)
+  }
+  return res.status(201).json({ success: true, data: { booking: result.booking } })
 }
 
 module.exports = { createReservation, listReservations, getReservation, cancelReservation, checkoutReservation }
