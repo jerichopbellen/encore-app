@@ -1,9 +1,11 @@
 const express = require('express')
 const bookingController = require('../controllers/bookingController')
+const { requireAuthentication } = require('../middleware/authMiddleware')
 
 const router = express.Router()
 
-// These routes are not protected yet; authentication is not implemented.
+router.use(requireAuthentication)
+
 router.get('/', bookingController.listBookings)
 router.get('/:bookingId', bookingController.getBooking)
 

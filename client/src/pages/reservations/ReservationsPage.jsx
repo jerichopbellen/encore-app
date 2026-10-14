@@ -146,6 +146,11 @@ function ReservationsPage() {
                 <span>Reservation total</span>
                 <strong>{formatPrice(reservation.total_amount)}</strong>
               </footer>
+              {reservation.status === 'pending' && (
+                <div className="reservation-card__checkout">
+                  <Link className="button-link" to={`/reservations/${reservation.id}/checkout`}>Review checkout</Link>
+                </div>
+              )}
             </article>
           ))}
         </div>

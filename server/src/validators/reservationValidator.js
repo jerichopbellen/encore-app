@@ -24,4 +24,10 @@ function validateReservationId(reservationId) {
   }
 }
 
-module.exports = { normalizeReservationInput, validateReservationId }
+function validateBookingId(bookingId) {
+  if (typeof bookingId !== 'string' || !UUID_PATTERN.test(bookingId)) {
+    throw new AppError('Booking ID must be a valid UUID.', 400)
+  }
+}
+
+module.exports = { normalizeReservationInput, validateReservationId, validateBookingId }

@@ -42,6 +42,12 @@ function Navbar() {
               >
                 My reservations
               </NavLink>
+              <NavLink
+                to="/bookings"
+                className={({ isActive }) => isActive ? 'navbar__bookings navbar__bookings--active' : 'navbar__bookings'}
+              >
+                My bookings
+              </NavLink>
               <button className="navbar__logout" type="button" onClick={handleLogout}>Log out</button>
             </>
           ) : (
