@@ -46,9 +46,10 @@ export async function getReservation(reservationId) {
   return data.reservation
 }
 
-export async function checkoutReservation(reservationId) {
+export async function checkoutReservation(reservationId, idempotencyKey) {
   const data = await requestReservationsApi(`/${encodeURIComponent(reservationId)}/checkout`, {
     method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
   })
   return data.booking
 }

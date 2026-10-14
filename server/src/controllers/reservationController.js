@@ -5,6 +5,7 @@ const {
   normalizeReservationInput,
   validateReservationId,
 } = require('../validators/reservationValidator')
+const { validateIdempotencyKey } = require('../validators/idempotencyValidator')
 
 async function createReservation(req, res) {
   const input = normalizeReservationInput(req.body)
@@ -37,12 +38,13 @@ async function cancelReservation(req, res) {
 
 async function checkoutReservation(req, res) {
   validateReservationId(req.params.reservationId)
-  const result = await bookingService.checkoutReservation(req.user.id, req.params.reservationId)
+  const idempotencyKey = validateIdempotencyKey(req.get('Idempotency-Key'))
+  const result = await bookingService.checkoutReservation(req.user.id, req.params.reservationId, idempotencyKey)
   if (result.outcome === 'not-found') throw new AppError('Reservation not found.', 404)
   if (result.outcome === 'not-pending') {
     throw new AppError('This reservation is no longer available for checkout.', 409)
   }
-  return res.status(201).json({ success: true, data: { booking: result.booking } })
+  return res.status(result.responseStatus).json(result.responseBody)
 }
 
 module.exports = { createReservation, listReservations, getReservation, cancelReservation, checkoutReservation }
