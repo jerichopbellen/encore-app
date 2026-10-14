@@ -276,9 +276,11 @@ Encore's REST API is organized into separate resource groups for health checks, 
 | GET | `/api/reservations` | List the current user's reservations (authenticated) |
 | GET | `/api/reservations/:reservationId` | Retrieve one of the current user's reservations (authenticated) |
 | POST | `/api/reservations/:reservationId/cancel` | Cancel a pending reservation (authenticated) |
-| POST | `/api/reservations/:reservationId/checkout` | Confirm a simulated checkout and create a booking (authenticated) |
+| POST | `/api/reservations/:reservationId/checkout` | Confirm a simulated checkout and create a booking (authenticated; requires `Idempotency-Key`) |
 
 Reservation holds expire after 15 minutes. Expired holds are processed when relevant event or reservation endpoints are accessed; a separate background worker is not currently configured.
+
+Checkout requires an `Idempotency-Key` header containing 8–255 ASCII letters, numbers, dots, underscores, tildes, or hyphens. The key is scoped to the authenticated user and checkout operation. Retrying the same key for the same reservation replays the original successful status and response body; using it for a different reservation returns HTTP 409. The client generates one UUID per checkout attempt and retains it in session storage until it receives a successful response, so it can recover if the server committed but the response was lost. The key and saved response commit in the same PostgreSQL transaction as the booking. Failed checkout attempts do not consume a key.
 
 ### Booking APIs
 

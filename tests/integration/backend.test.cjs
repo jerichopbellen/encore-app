@@ -116,6 +116,15 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
     return result
   }
 
+  async function checkout(account, reservationId, key = randomUUID(), body) {
+    return request(`/api/reservations/${reservationId}/checkout`, {
+      method: 'POST',
+      cookie: account.cookie,
+      ...(body ? { body } : {}),
+      headers: { 'Idempotency-Key': key },
+    })
+  }
+
   try {
     // This read-only preflight fails clearly if the dedicated database is not prepared.
     let existingRowCounts
@@ -283,7 +292,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       const otherOwner = await request(`/api/reservations/${reservation.id}`, { cookie: fixture.otherAccount.cookie })
       assert.equal(otherOwner.response.status, 404)
       const otherCheckout = await request(`/api/reservations/${reservation.id}/checkout`, {
-        method: 'POST', cookie: fixture.otherAccount.cookie,
+        method: 'POST', cookie: fixture.otherAccount.cookie, headers: { 'Idempotency-Key': randomUUID() },
       })
       assert.equal(otherCheckout.response.status, 404)
 
@@ -301,7 +310,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       assert.equal((await prisma.ticket_types.findUnique({ where: { id: ticket.id } })).available_quantity, 8)
 
       const cancelledCheckout = await request(`/api/reservations/${reservation.id}/checkout`, {
-        method: 'POST', cookie: fixture.account.cookie,
+        method: 'POST', cookie: fixture.account.cookie, headers: { 'Idempotency-Key': randomUUID() },
       })
       assert.equal(cancelledCheckout.response.status, 409)
     })
@@ -323,7 +332,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       assert.equal((await prisma.ticket_types.findUnique({ where: { id: ticket.id } })).available_quantity, availableBefore + 1)
 
       const checkout = await request(`/api/reservations/${reservationId}/checkout`, {
-        method: 'POST', cookie: fixture.account.cookie,
+        method: 'POST', cookie: fixture.account.cookie, headers: { 'Idempotency-Key': randomUUID() },
       })
       assert.equal(checkout.response.status, 409)
       assert.equal((await prisma.ticket_types.findUnique({ where: { id: ticket.id } })).available_quantity, availableBefore + 1)
@@ -346,29 +355,41 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       assert.equal(await prisma.reservations.count({ where: { id: { in: successfulReservationIds } } }), 1)
     })
 
-    await t.test('checkout creates one owner-scoped booking using saved amounts and rolls back on failure', async () => {
+    await t.test('checkout idempotency replays committed outcomes and rolls failures back', async () => {
       await prisma.ticket_types.update({ where: { id: ticket.id }, data: { available_quantity: 2 } })
       const created = await createReservation(fixture.account, event.id, ticket.id, 2, { total_amount: '0.01' })
       assert.equal(created.response.status, 201)
       const reservationId = created.payload.data.reservation.id
       const inventoryAfterHold = (await prisma.ticket_types.findUnique({ where: { id: ticket.id } })).available_quantity
 
-      const checkout = await request(`/api/reservations/${reservationId}/checkout`, {
-        method: 'POST', cookie: fixture.account.cookie,
-        body: { total_amount: '0.01', unit_price: '0.01' },
-      })
-      assert.equal(checkout.response.status, 201)
-      const booking = checkout.payload.data.booking
+      const key = randomUUID()
+      const checkoutResult = await checkout(fixture.account, reservationId, key, { total_amount: '0.01', unit_price: '0.01' })
+      assert.equal(checkoutResult.response.status, 201)
+      const booking = checkoutResult.payload.data.booking
       fixture.reservationIds.push(reservationId)
       assert.equal(booking.total_amount, '24.70')
       assert.equal((await prisma.reservations.findUnique({ where: { id: reservationId } })).status, 'confirmed')
       assert.equal((await prisma.ticket_types.findUnique({ where: { id: ticket.id } })).available_quantity, inventoryAfterHold)
 
-      const repeated = await request(`/api/reservations/${reservationId}/checkout`, {
-        method: 'POST', cookie: fixture.account.cookie,
-      })
-      assert.equal(repeated.response.status, 409)
+      const repeated = await checkout(fixture.account, reservationId, key)
+      assert.equal(repeated.response.status, 201)
+      assert.deepEqual(repeated.payload, checkoutResult.payload)
+      const differentKey = await checkout(fixture.account, reservationId)
+      assert.equal(differentKey.response.status, 409)
       assert.equal(await prisma.bookings.count({ where: { reservation_id: reservationId } }), 1)
+      const savedKey = await prisma.idempotency_keys.findUnique({
+        where: { user_id_operation_idempotency_key: { user_id: fixture.account.id, operation: 'checkout', idempotency_key: key } },
+      })
+      assert.equal(savedKey.response_status, 201)
+      assert.deepEqual(savedKey.response_body, checkoutResult.payload)
+
+      await prisma.ticket_types.update({ where: { id: secondEventTicket.id }, data: { available_quantity: 1 } })
+      const differentInputReservation = await createReservation(fixture.account, secondEvent.id, secondEventTicket.id, 1)
+      assert.equal(differentInputReservation.response.status, 201)
+      const differentInputId = differentInputReservation.payload.data.reservation.id
+      const keyConflict = await checkout(fixture.account, differentInputId, key)
+      assert.equal(keyConflict.response.status, 409)
+      assert.equal(await prisma.bookings.count({ where: { reservation_id: differentInputId } }), 0)
       await assert.rejects(
         prisma.bookings.create({ data: { reservation_id: reservationId, user_id: fixture.account.id, total_amount: '24.70' } }),
         (error) => error.code === 'P2002',
@@ -383,34 +404,86 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       const otherDetail = await request(`/api/bookings/${booking.id}`, { cookie: fixture.otherAccount.cookie })
       assert.equal(otherDetail.response.status, 404)
 
+      const missingKey = await request(`/api/reservations/${reservationId}/checkout`, { method: 'POST', cookie: fixture.account.cookie })
+      assert.equal(missingKey.response.status, 400)
+      const invalidKey = await request(`/api/reservations/${reservationId}/checkout`, {
+        method: 'POST', cookie: fixture.account.cookie, headers: { 'Idempotency-Key': 'bad key' },
+      })
+      assert.equal(invalidKey.response.status, 400)
+
+      // The same key text is independent in a second user's scope.
+      await prisma.ticket_types.update({ where: { id: secondEventTicket.id }, data: { available_quantity: 1 } })
+      const otherUsersReservation = await createReservation(fixture.otherAccount, secondEvent.id, secondEventTicket.id, 1)
+      assert.equal(otherUsersReservation.response.status, 201)
+      const otherUsersResult = await checkout(fixture.otherAccount, otherUsersReservation.payload.data.reservation.id, key)
+      assert.equal(otherUsersResult.response.status, 201)
+      assert.notEqual(otherUsersResult.payload.data.booking.id, booking.id)
+
+      const crossOwner = await checkout(fixture.otherAccount, reservationId)
+      assert.equal(crossOwner.response.status, 404)
+
       await prisma.ticket_types.update({ where: { id: ticket.id }, data: { available_quantity: 1 } })
       const concurrentReservation = await createReservation(fixture.account, event.id, ticket.id, 1)
       assert.equal(concurrentReservation.response.status, 201)
       const concurrentReservationId = concurrentReservation.payload.data.reservation.id
       const startTogether = makeBarrier(2)
       const concurrentCheckouts = await Promise.all([
-        startTogether(() => request(`/api/reservations/${concurrentReservationId}/checkout`, { method: 'POST', cookie: fixture.account.cookie })),
-        startTogether(() => request(`/api/reservations/${concurrentReservationId}/checkout`, { method: 'POST', cookie: fixture.account.cookie })),
+        startTogether(() => checkout(fixture.account, concurrentReservationId)),
+        startTogether(() => checkout(fixture.account, concurrentReservationId)),
       ])
       assert.deepEqual(concurrentCheckouts.map((item) => item.response.status).sort((a, b) => a - b), [201, 409])
       fixture.reservationIds.push(concurrentReservationId)
       assert.equal(await prisma.bookings.count({ where: { reservation_id: concurrentReservationId } }), 1)
       assert.equal((await prisma.ticket_types.findUnique({ where: { id: ticket.id } })).available_quantity, 0)
 
+      await prisma.ticket_types.update({ where: { id: secondEventTicket.id }, data: { available_quantity: 1 } })
+      const sameKeyReservation = await createReservation(fixture.account, secondEvent.id, secondEventTicket.id, 1)
+      assert.equal(sameKeyReservation.response.status, 201)
+      const sameKeyReservationId = sameKeyReservation.payload.data.reservation.id
+      const sameKey = randomUUID()
+      const sameKeyBarrier = makeBarrier(2)
+      const sameKeyResults = await Promise.all([
+        sameKeyBarrier(() => checkout(fixture.account, sameKeyReservationId, sameKey)),
+        sameKeyBarrier(() => checkout(fixture.account, sameKeyReservationId, sameKey)),
+      ])
+      assert.deepEqual(sameKeyResults.map((item) => item.response.status), [201, 201])
+      assert.deepEqual(sameKeyResults[0].payload, sameKeyResults[1].payload)
+      assert.equal(await prisma.bookings.count({ where: { reservation_id: sameKeyReservationId } }), 1)
+
+      await prisma.ticket_types.update({ where: { id: secondEventTicket.id }, data: { available_quantity: 1 } })
+      const differentKeysReservation = await createReservation(fixture.account, secondEvent.id, secondEventTicket.id, 1)
+      assert.equal(differentKeysReservation.response.status, 201)
+      const differentKeysReservationId = differentKeysReservation.payload.data.reservation.id
+      const differentKeysBarrier = makeBarrier(2)
+      const racingKeys = [randomUUID(), randomUUID()]
+      const differentKeyResults = await Promise.all([
+        differentKeysBarrier(() => checkout(fixture.account, differentKeysReservationId, racingKeys[0])),
+        differentKeysBarrier(() => checkout(fixture.account, differentKeysReservationId, racingKeys[1])),
+      ])
+      assert.deepEqual(differentKeyResults.map((item) => item.response.status).sort((a, b) => a - b), [201, 409])
+      assert.equal(await prisma.bookings.count({ where: { reservation_id: differentKeysReservationId } }), 1)
+      assert.equal(await prisma.idempotency_keys.count({ where: { user_id: fixture.account.id, operation: 'checkout', idempotency_key: { in: racingKeys } } }), 1)
+
       await prisma.ticket_types.update({ where: { id: ticket.id }, data: { available_quantity: 1 } })
       const failedReservation = await createReservation(fixture.account, event.id, ticket.id, 1)
       assert.equal(failedReservation.response.status, 201)
       const failedReservationId = failedReservation.payload.data.reservation.id
       fixture.reservationIds.push(failedReservationId)
+      const failedKey = randomUUID()
       await prisma.bookings.create({
         data: { reservation_id: failedReservationId, user_id: fixture.account.id, total_amount: '12.35' },
       })
       const failedCheckout = await request(`/api/reservations/${failedReservationId}/checkout`, {
-        method: 'POST', cookie: fixture.account.cookie,
+        method: 'POST', cookie: fixture.account.cookie, headers: { 'Idempotency-Key': failedKey },
       })
       assert.equal(failedCheckout.response.status, 500)
       assert.equal(failedCheckout.payload.message, 'An unexpected server error occurred.')
       assert.equal((await prisma.reservations.findUnique({ where: { id: failedReservationId } })).status, 'pending')
+      assert.equal(await prisma.idempotency_keys.count({ where: { user_id: fixture.account.id, operation: 'checkout', idempotency_key: failedKey } }), 0)
+      await prisma.bookings.delete({ where: { reservation_id: failedReservationId } })
+      const validRetry = await checkout(fixture.account, failedReservationId, failedKey)
+      assert.equal(validRetry.response.status, 201)
+      assert.equal(await prisma.bookings.count({ where: { reservation_id: failedReservationId } }), 1)
     })
   } finally {
     if (fixture.server) await new Promise((resolve) => fixture.server.close(resolve))

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
 import { checkoutReservation, getReservation } from '../../services/reservationsApi'
@@ -6,6 +6,34 @@ import { formatPrice } from '../../utils/eventDisplay'
 
 function formatDate(value) {
   return new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
+function storageKeyForReservation(reservationId) {
+  return `encore:checkout:${reservationId}`
+}
+
+function readStoredCheckoutKey(reservationId) {
+  try {
+    return window.sessionStorage.getItem(storageKeyForReservation(reservationId))
+  } catch {
+    return null
+  }
+}
+
+function storeCheckoutKey(reservationId, key) {
+  try {
+    window.sessionStorage.setItem(storageKeyForReservation(reservationId), key)
+  } catch {
+    // The in-memory ref still reuses the key for retries during this page view.
+  }
+}
+
+function clearStoredCheckoutKey(reservationId) {
+  try {
+    window.sessionStorage.removeItem(storageKeyForReservation(reservationId))
+  } catch {
+    // Storage may be unavailable in restricted browser contexts.
+  }
 }
 
 function CheckoutPage() {
@@ -16,6 +44,13 @@ function CheckoutPage() {
   const [loadState, setLoadState] = useState('loading')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const checkoutKeyRef = useRef(null)
+  const [hasPendingCheckoutKey, setHasPendingCheckoutKey] = useState(false)
+
+  useEffect(() => {
+    checkoutKeyRef.current = readStoredCheckoutKey(reservationId)
+    setHasPendingCheckoutKey(Boolean(checkoutKeyRef.current))
+  }, [reservationId])
 
   useEffect(() => {
     if (isAuthLoading || !user) return undefined
@@ -41,7 +76,15 @@ function CheckoutPage() {
     setIsSubmitting(true)
     setError('')
     try {
-      const booking = await checkoutReservation(reservationId)
+      if (!checkoutKeyRef.current) {
+        checkoutKeyRef.current = window.crypto.randomUUID()
+        storeCheckoutKey(reservationId, checkoutKeyRef.current)
+        setHasPendingCheckoutKey(true)
+      }
+      const booking = await checkoutReservation(reservationId, checkoutKeyRef.current)
+      clearStoredCheckoutKey(reservationId)
+      checkoutKeyRef.current = null
+      setHasPendingCheckoutKey(false)
       navigate(`/bookings/${booking.id}`, { replace: true })
     } catch (requestError) {
       setError(requestError.message)
@@ -77,9 +120,9 @@ function CheckoutPage() {
           </ul>
           <div className="checkout-card__total"><span>Total</span><strong>{formatPrice(reservation.total_amount)}</strong></div>
           {error && <p className="checkout-error" role="alert">{error}</p>}
-          {reservation.status === 'pending' ? (
+          {reservation.status === 'pending' || (reservation.status === 'confirmed' && hasPendingCheckoutKey) ? (
             <button className="button-link checkout-submit" type="button" disabled={isSubmitting} onClick={handleCheckout}>
-              {isSubmitting ? 'Confirming…' : 'Confirm simulated checkout'}
+              {isSubmitting ? 'Confirming…' : reservation.status === 'confirmed' ? 'Recover booking confirmation' : 'Confirm simulated checkout'}
             </button>
           ) : (
             <p className="checkout-state__note">This reservation cannot be checked out. {reservation.status === 'confirmed' ? <Link to="/bookings">View your bookings</Link> : <Link to="/reservations">View your reservations</Link>}.</p>
