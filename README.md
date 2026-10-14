@@ -115,6 +115,9 @@ encore-app/
 │   ├── prisma7.config.ts
 │   ├── .env.example
 │   └── package.json
+├── tests/
+│   ├── unit/
+│   └── integration/
 ├── .gitignore
 └── README.md
 ```
@@ -273,7 +276,7 @@ Encore's REST API is organized into separate resource groups for health checks, 
 | GET | `/api/reservations` | List the current user's reservations (authenticated) |
 | GET | `/api/reservations/:reservationId` | Retrieve one of the current user's reservations (authenticated) |
 | POST | `/api/reservations/:reservationId/cancel` | Cancel a pending reservation (authenticated) |
-| POST | `/api/reservations/:reservationId/checkout` | Checkout placeholder; not implemented yet (returns HTTP 501) |
+| POST | `/api/reservations/:reservationId/checkout` | Confirm a simulated checkout and create a booking (authenticated) |
 
 Reservation holds expire after 15 minutes. Expired holds are processed when relevant event or reservation endpoints are accessed; a separate background worker is not currently configured.
 
@@ -281,8 +284,8 @@ Reservation holds expire after 15 minutes. Expired holds are processed when rele
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/bookings` | Placeholder; listing bookings is not implemented yet |
-| GET | `/api/bookings/:bookingId` | Placeholder; retrieving a booking is not implemented yet |
+| GET | `/api/bookings` | List the authenticated customer's bookings |
+| GET | `/api/bookings/:bookingId` | Retrieve one booking owned by the authenticated customer |
 
 ### Administration APIs
 
@@ -293,7 +296,7 @@ Reservation holds expire after 15 minutes. Expired holds are processed when rele
 | PATCH | `/api/admin/events/:eventId/status` | Placeholder; event status updates are not implemented yet |
 | POST | `/api/admin/events/:eventId/ticket-types` | Placeholder; ticket-type creation is not implemented yet |
 
-Booking and administration routes are not protected by authentication and authorization middleware yet and should not be treated as secure, usable workflows.
+Booking routes require authentication and return only the signed-in customer's records. Administration routes are not protected by authorization middleware yet and should not be treated as secure, usable workflows.
 
 Successful implemented API responses generally use a JSON structure with a `success` field and a `data` or `message` field, as appropriate. Placeholder endpoints may return a not-implemented response instead.
 
@@ -322,6 +325,8 @@ Apply password hashing, authentication, role-based authorization, request valida
 ### Testing
 
 Test successful requests, invalid inputs, missing records, inventory limits, reservation cancellation and expiration, duplicate requests, and concurrent booking attempts.
+
+See [tests/README.md](tests/README.md) for the automated test commands, dedicated PostgreSQL test database setup, and fixture cleanup behavior.
 
 ## Development Workflow
 
