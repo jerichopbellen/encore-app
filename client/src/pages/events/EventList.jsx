@@ -75,7 +75,13 @@ function EventList() {
           <h1 id="discover-title">Find your next<br /><span>encore.</span></h1>
           <p className="catalogue__subtitle">Live music, big games, and the moments you’ll talk about tomorrow.</p>
           <a className="catalogue__hero-action" href="#catalogue-events">Explore events <span aria-hidden="true">↓</span></a>
+          <p className="catalogue__hero-edition"><span>01</span><span>FOR THE LIVE MOMENTS</span></p>
         </div>
+        <figure className="catalogue__hero-visual">
+          <img src="/encore-festival-hero.png" alt="Sunlit festival crowd facing a large live music stage" />
+          <span className="catalogue__hero-seal" aria-hidden="true"><strong>LIVE</strong><span>LOUD</span><small>ENCORE</small></span>
+          <figcaption><span>OUT THERE, TOGETHER</span><span>ENCORE / 001</span></figcaption>
+        </figure>
       </section>
 
       <section className="catalogue__events" id="catalogue-events" aria-label="Event catalogue">

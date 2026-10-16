@@ -17,10 +17,29 @@ import AdminEventManagePage from './pages/admin/AdminEventManagePage'
 import AdminDashboardPage from './pages/admin/AdminDashboardPage'
 import AdminRouteGuard from './components/admin/AdminRouteGuard'
 import AccountLayout from './pages/account/AccountLayout'
+import useDocumentTitle from './hooks/useDocumentTitle'
 import './App.css'
+
+function getRouteTitle(pathname) {
+  if (pathname === '/') return ''
+  if (/^\/events\/[^/]+$/.test(pathname)) return 'Event details'
+  if (pathname === '/login') return 'Log in'
+  if (pathname === '/register') return 'Create account'
+  if (pathname === '/account' || pathname === '/account/profile' || pathname === '/profile') return 'Profile'
+  if (pathname === '/account/reservations' || pathname === '/reservations') return 'My reservations'
+  if (pathname === '/account/bookings' || pathname === '/bookings') return 'My bookings'
+  if (/^\/reservations\/[^/]+\/checkout$/.test(pathname)) return 'Checkout'
+  if (/^\/bookings\/[^/]+$/.test(pathname)) return 'Booking details'
+  if (pathname === '/admin') return 'Admin dashboard'
+  if (pathname === '/admin/events') return 'Admin events'
+  if (pathname === '/admin/events/new') return 'Create event'
+  if (/^\/admin\/events\/[^/]+$/.test(pathname)) return 'Event workspace'
+  return 'Discover'
+}
 
 function App() {
   const location = useLocation()
+  useDocumentTitle(getRouteTitle(location.pathname))
   const isDiscoverPage = location.pathname === '/'
   const [mobileMenuLayout, setMobileMenuLayout] = useState({ isOpen: false, height: 0 })
 

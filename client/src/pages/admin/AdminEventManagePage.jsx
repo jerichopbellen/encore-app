@@ -5,6 +5,7 @@ import TicketTypesManager from '../../components/admin/TicketTypesManager'
 import { getAdminEvents, updateAdminEvent, updateAdminEventStatus } from '../../services/adminEventsApi'
 import { formatEventDate } from '../../utils/eventDisplay'
 import useUnsavedChanges from '../../hooks/useUnsavedChanges'
+import useDocumentTitle from '../../hooks/useDocumentTitle'
 
 function AdminEventManagePage() {
   const { eventId } = useParams()
@@ -98,6 +99,7 @@ function AdminEventManagePage() {
   }
 
   const currentLoadState = loadedEventId === eventId ? loadState : 'loading'
+  useDocumentTitle(currentLoadState === 'success' && event ? event.title : 'Event workspace')
 
   if (currentLoadState === 'loading') return <p className="admin-events-state" role="status">Loading event workspace…</p>
   if (currentLoadState === 'error') {
@@ -136,9 +138,9 @@ function AdminEventManagePage() {
         </div>
         <div className="admin-event-workspace__actions">
           {!isEditing && <button className="admin-events__secondary" type="button" onClick={() => { setErrorMessage(''); setIsEditing(true) }}>Edit event details</button>}
-          {event.status === 'published' && <Link to={`/events/${event.id}`}>View public event</Link>}
+          {event.status === 'published' && <Link className="admin-event-workspace__public" to={`/events/${event.id}`}>View public event</Link>}
           {!isEditing && (
-            <button className="button-link" type="button" onClick={handleStatusChange} disabled={pendingStatusChange || hasUnsavedChanges}>
+            <button className={`button-link admin-event-workspace__status-action admin-event-workspace__status-action--${event.status}`} type="button" onClick={handleStatusChange} disabled={pendingStatusChange || hasUnsavedChanges}>
               {pendingStatusChange ? 'Saving…' : event.status === 'published' ? 'Unpublish event' : 'Publish event'}
             </button>
           )}
