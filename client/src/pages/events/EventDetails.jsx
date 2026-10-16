@@ -4,6 +4,7 @@ import { getEvent } from '../../services/eventsApi'
 import { formatEventDate, formatPrice, getStartingPrice } from '../../utils/eventDisplay'
 import EventReservationPanel from '../../components/events/EventReservationPanel'
 import EventArtwork from '../../components/events/EventArtwork'
+import useDocumentTitle from '../../hooks/useDocumentTitle'
 
 function EventDetails() {
   const { id } = useParams()
@@ -11,6 +12,7 @@ function EventDetails() {
   const [retryCount, setRetryCount] = useState(0)
   const currentLoadState = loadState.id === id ? loadState : { status: 'loading' }
   const event = currentLoadState.event
+  useDocumentTitle(currentLoadState.status === 'success' && event ? event.title : 'Event details')
 
   useEffect(() => {
     let isCurrentRequest = true

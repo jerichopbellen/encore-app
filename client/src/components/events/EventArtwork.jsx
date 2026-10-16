@@ -9,18 +9,15 @@ function getPalette(id) {
 
 function EventArtwork({ event, variant = 'card' }) {
   const date = formatEventDate(event.starts_at, { month: 'short', day: 'numeric' })
-  const monogram = Array.from(event.title.trim())[0]?.toLocaleUpperCase() || 'E'
-
   return (
     <div
       className={`event-artwork event-artwork--${getPalette(event.id)} event-artwork--${variant}`}
       role="img"
       aria-label={`Encore event artwork for ${event.title}, ${date}`}
     >
-      <span className="event-artwork__kicker">ENCORE <span aria-hidden="true">/</span> LIVE EVENTS</span>
-      <span className="event-artwork__monogram" aria-hidden="true">{monogram}</span>
-      {variant === 'detail' && <span className="event-artwork__title">{event.title}</span>}
-      <span className="event-artwork__date">{date}</span>
+      <span className="event-artwork__kicker">ENCORE <span aria-hidden="true">/</span> LIVE</span>
+      <span className="event-artwork__title">{event.title}</span>
+      <span className="event-artwork__date">{date} <span aria-hidden="true">·</span> {event.venue}</span>
     </div>
   )
 }

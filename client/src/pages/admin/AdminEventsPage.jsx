@@ -161,8 +161,8 @@ function AdminEventsPage() {
                   </div>
                   <div className="admin-event-card__actions">
                     <Link className="admin-event-card__manage" to={`/admin/events/${event.id}`}>Manage event</Link>
-                    {event.status === 'published' && <Link to={`/events/${event.id}`}>View public event</Link>}
-                    <button className="admin-events__secondary" type="button" onClick={() => handleStatusChange(event)} disabled={pendingEventId === event.id}>
+                    {event.status === 'published' && <Link className="admin-event-card__public" to={`/events/${event.id}`}>View public event</Link>}
+                    <button className={`admin-events__secondary admin-event-card__status admin-event-card__status--${event.status}`} type="button" onClick={() => handleStatusChange(event)} disabled={pendingEventId === event.id}>
                       {pendingEventId === event.id ? 'Saving…' : event.status === 'published' ? 'Unpublish' : 'Publish'}
                     </button>
                   </div>
