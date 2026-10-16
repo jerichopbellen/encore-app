@@ -1,26 +1,8 @@
 const AppError = require('../utils/AppError')
 const eventService = require('../services/eventService')
 const reservationService = require('../services/reservationService')
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function serializeEvent(event) {
-  return {
-    id: event.id,
-    title: event.title,
-    description: event.description,
-    venue: event.venue,
-    starts_at: event.starts_at.toISOString(),
-    status: event.status,
-    ticket_types: event.ticket_types.map((ticketType) => ({
-      id: ticketType.id,
-      name: ticketType.name,
-      price: ticketType.price.toFixed(2),
-      total_quantity: ticketType.total_quantity,
-      available_quantity: ticketType.available_quantity,
-    })),
-  }
-}
+const { serializeEvent } = require('../utils/eventSerializer')
+const { validateEventId } = require('../validators/eventValidator')
 
 async function listEvents(req, res) {
   await reservationService.releaseExpiredReservations()
@@ -35,9 +17,7 @@ async function listEvents(req, res) {
 async function getEvent(req, res) {
   const { eventId } = req.params
 
-  if (!UUID_PATTERN.test(eventId)) {
-    throw new AppError('Event ID must be a valid UUID.', 400)
-  }
+  validateEventId(eventId)
 
   await reservationService.releaseExpiredReservations()
   const event = await eventService.getPublishedEventById(eventId)

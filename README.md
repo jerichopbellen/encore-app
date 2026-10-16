@@ -303,14 +303,15 @@ Checkout requires an `Idempotency-Key` header containing 8–255 ASCII letters, 
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/admin/events` | Placeholder; event creation is not implemented yet |
-| PATCH | `/api/admin/events/:eventId` | Placeholder; event updates are not implemented yet |
-| PATCH | `/api/admin/events/:eventId/status` | Placeholder; event status updates are not implemented yet |
+| GET | `/api/admin/events` | Retrieve all events, including drafts (administrator only) |
+| POST | `/api/admin/events` | Create an event as a draft (administrator only) |
+| PATCH | `/api/admin/events/:eventId` | Update event title, description, venue, or start time (administrator only) |
+| PATCH | `/api/admin/events/:eventId/status` | Publish or return an event to draft (administrator only) |
 | POST | `/api/admin/events/:eventId/ticket-types` | Placeholder; ticket-type creation is not implemented yet |
 
 Booking routes require authentication and return only the signed-in customer's records. The `/api/admin` route group first requires a valid session (HTTP `401` when missing or invalid), then checks the authenticated user's current database role (HTTP `403` for non-admin users). The role is loaded from PostgreSQL for each authenticated request, so changing an account back to `customer` revokes admin access even for an existing session. Public registration always creates a customer, and profile updates only change the name.
 
-The admin event and ticket-type endpoints remain placeholders. An authorized administrator reaches the existing HTTP `501 Not Implemented` responses; event management is not functional until a later milestone. The frontend does not grant or enforce administrator privileges.
+Admin event routes require the current database role to be `admin`. Creating an event leaves it in the schema's default `draft` status. The status endpoint accepts only `draft` and `published`; the public catalogue and event details continue to show published events only. Event updates allow only the title, description, venue, and start time, preserving related ticket types, reservations, and inventory. The admin ticket-type endpoint remains a placeholder and returns HTTP `501`. The frontend also checks the authenticated user's role for page access, while the backend remains the authorization boundary.
 
 Successful implemented API responses generally use a JSON structure with a `success` field and a `data` or `message` field, as appropriate. Placeholder endpoints may return a not-implemented response instead.
 
