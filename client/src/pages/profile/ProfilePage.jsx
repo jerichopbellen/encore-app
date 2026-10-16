@@ -10,7 +10,7 @@ function getInitials(name) {
   return Array.from(words[0] || '—').slice(0, 2).join('').toLocaleUpperCase()
 }
 
-function ProfilePage() {
+function ProfilePage({ embedded = false }) {
   const { user, isLoading, updateProfile } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const [draftName, setDraftName] = useState(null)
@@ -62,12 +62,12 @@ function ProfilePage() {
   }
 
   return (
-    <section className="profile-page" aria-labelledby="profile-title">
-      <header className="profile-page__heading">
+    <section className={`profile-page${embedded ? ' profile-page--embedded' : ''}`} aria-labelledby={embedded ? undefined : 'profile-title'}>
+      {!embedded && <header className="profile-page__heading">
         <p className="eyebrow">YOUR ACCOUNT</p>
         <h1 id="profile-title">My profile</h1>
         <p className="profile-page__intro">Manage the details connected to your Encore account.</p>
-      </header>
+      </header>}
 
       <div className="profile-card">
         <div className="profile-card__identity">
@@ -141,7 +141,7 @@ function ProfilePage() {
         {errorMessage && <p className="auth-form__error profile-page__message" id="profile-error" role="alert">{errorMessage}</p>}
         {notice && <p className="auth-form__notice" role="status">{notice}</p>}
       </div>
-      <Link className="profile-page__back" to="/">Back to events</Link>
+      {!embedded && <Link className="profile-page__back" to="/">Back to events</Link>}
     </section>
   )
 }

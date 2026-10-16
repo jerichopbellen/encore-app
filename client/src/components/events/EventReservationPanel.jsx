@@ -83,7 +83,7 @@ function EventReservationPanel({ event }) {
               <p className="reservation-panel__expiry">
                 Held until {new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(reservation.expires_at))}.
               </p>
-              <Link to="/reservations">View my reservations</Link>
+              <Link to="/account/reservations">View my reservations</Link>
             </div>
           </div>
         ) : event.ticket_types.length === 0 ? (

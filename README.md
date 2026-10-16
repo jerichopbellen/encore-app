@@ -265,8 +265,12 @@ Encore's REST API is organized into separate resource groups for health checks, 
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/events` | Retrieve published events |
+| GET | `/api/events` | Retrieve a page of published events, optionally searched, filtered, and sorted |
 | GET | `/api/events/:eventId` | Retrieve a published event and its ticket types |
+
+`GET /api/events` accepts `page` (default `1`), `page_size` (default `12`, maximum `48`), `q` (up to 100 characters; case-insensitive match against title or venue), `available` (`true` to include only events with available tickets), and `sort` (`soonest`, `latest`, or `recently-added`; defaults to `soonest`). These options combine, and each new search or filter starts on page one in the client. Results contain `data.events` and `data.pagination` (`page`, `page_size`, `total_events`, and `total_pages`). Only published events are returned. Results use deterministic ordering with event ID as a tie-breaker. Category and price filters are not offered because those fields are not represented as event catalogue attributes in the current schema.
+
+The customer frontend uses `/account/profile`, `/account/reservations`, and `/account/bookings` under a shared authenticated account layout. `/account` opens the profile section. The former `/profile`, `/reservations`, and `/bookings` list URLs redirect to their matching account sections. Reservation checkout remains at `/reservations/:reservationId/checkout`, and booking confirmation remains at `/bookings/:bookingId` so existing transaction flows and deep links keep working.
 
 ### Authentication APIs
 
