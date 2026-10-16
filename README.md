@@ -241,6 +241,16 @@ Vite typically serves the application at:
 
 The Vite development server proxies `/api` requests to the Express backend.
 
+### Provision the first administrator
+
+First create the account through the normal registration flow. From `server/`, verify that `DATABASE_URL` in your local `server/.env` points to the intended database, then promote that exact existing account:
+
+```powershell
+npm run admin:promote -- owner@example.com
+```
+
+The command changes only that user's `role` field. It does not create an account, set a password, or run automatically during startup or seeding. It fails if the email is invalid or no matching account exists. Keep database access and the command restricted to a trusted operator.
+
 ## API Overview
 
 Encore's REST API is organized into separate resource groups for health checks, event discovery, authentication, reservations, bookings, and administration.
@@ -298,7 +308,9 @@ Checkout requires an `Idempotency-Key` header containing 8–255 ASCII letters, 
 | PATCH | `/api/admin/events/:eventId/status` | Placeholder; event status updates are not implemented yet |
 | POST | `/api/admin/events/:eventId/ticket-types` | Placeholder; ticket-type creation is not implemented yet |
 
-Booking routes require authentication and return only the signed-in customer's records. Administration routes are not protected by authorization middleware yet and should not be treated as secure, usable workflows.
+Booking routes require authentication and return only the signed-in customer's records. The `/api/admin` route group first requires a valid session (HTTP `401` when missing or invalid), then checks the authenticated user's current database role (HTTP `403` for non-admin users). The role is loaded from PostgreSQL for each authenticated request, so changing an account back to `customer` revokes admin access even for an existing session. Public registration always creates a customer, and profile updates only change the name.
+
+The admin event and ticket-type endpoints remain placeholders. An authorized administrator reaches the existing HTTP `501 Not Implemented` responses; event management is not functional until a later milestone. The frontend does not grant or enforce administrator privileges.
 
 Successful implemented API responses generally use a JSON structure with a `success` field and a `data` or `message` field, as appropriate. Placeholder endpoints may return a not-implemented response instead.
 
