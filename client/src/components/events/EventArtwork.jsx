@@ -1,6 +1,6 @@
 import { formatEventDate } from '../../utils/eventDisplay'
 
-const artworkPalettes = ['plum', 'blue', 'copper', 'moss']
+const artworkPalettes = ['ink', 'blue', 'copper', 'moss']
 
 function getPalette(id) {
   const hash = Array.from(String(id || 'encore')).reduce((total, character) => total + character.charCodeAt(0), 0)

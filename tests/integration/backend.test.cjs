@@ -139,8 +139,11 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         prisma.bookings,
         prisma.idempotency_keys,
       ].map((table) => table.count()))
-    } catch {
-      throw new Error('The dedicated test database is unavailable or does not have Encore tables. Prepare only the database named in TEST_DATABASE_URL before running integration tests.')
+    } catch (error) {
+      const safeCode = typeof error.code === 'string' && /^[A-Z0-9]+$/.test(error.code)
+        ? ` (database error ${error.code})`
+        : ''
+      throw new Error(`The dedicated test database is unavailable or does not have Encore tables${safeCode}. Prepare only the database named in TEST_DATABASE_URL before running integration tests.`)
     }
     if (existingRowCounts.some((count) => count > 0)) {
       throw new Error('The dedicated integration-test database must be empty before a run. Use a separate empty database; the suite does not clean pre-existing data.')

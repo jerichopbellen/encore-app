@@ -144,7 +144,7 @@ function AdminDashboardPage() {
                     <p>{event.venue}</p>
                     <time dateTime={event.starts_at}>{formatEventDate(event.starts_at, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</time>
                   </div>
-                  <Link to="/admin/events" aria-label={`Manage ${event.title}`}>Manage</Link>
+                  <Link to={`/admin/events/${event.id}`} aria-label={`Manage ${event.title}`}>Manage</Link>
                 </li>
               ))}
             </ul>

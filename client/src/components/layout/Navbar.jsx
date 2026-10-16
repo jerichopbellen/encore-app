@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
 
-function Navbar() {
+function Navbar({ onMobileMenuLayoutChange }) {
   const { user, isLoading, signOut } = useAuth()
   const location = useLocation()
   const [logoutError, setLogoutError] = useState('')
@@ -18,6 +18,26 @@ function Navbar() {
   const openDropdown = dropdownState.path === location.pathname ? dropdownState.name : null
   const isAccountRoute = location.pathname === '/account' || location.pathname.startsWith('/account/')
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/')
+
+  useLayoutEffect(() => {
+    if (!isMenuOpen || window.innerWidth > 720) {
+      onMobileMenuLayoutChange({ isOpen: false, height: 0 })
+      return undefined
+    }
+
+    const navigation = navigationRef.current
+    const updateMenuHeight = () => {
+      onMobileMenuLayoutChange({ isOpen: true, height: navigation?.offsetHeight || 0 })
+    }
+    const observer = new ResizeObserver(updateMenuHeight)
+    if (navigation) observer.observe(navigation)
+    updateMenuHeight()
+
+    return () => {
+      observer.disconnect()
+      onMobileMenuLayoutChange({ isOpen: false, height: 0 })
+    }
+  }, [isMenuOpen, onMobileMenuLayoutChange])
 
   useEffect(() => {
     function updateScrollState() {
