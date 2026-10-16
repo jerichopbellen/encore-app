@@ -1,5 +1,6 @@
 const AppError = require('../utils/AppError')
 const eventService = require('../services/eventService')
+const ticketTypeService = require('../services/ticketTypeService')
 const { serializeEvent } = require('../utils/eventSerializer')
 const {
   normalizeCreateEventInput,
@@ -7,7 +8,10 @@ const {
   normalizeEventStatusInput,
   validateEventId,
 } = require('../validators/eventValidator')
-const notImplemented = require('../utils/notImplemented')
+const {
+  normalizeCreateTicketTypeInput,
+  normalizeUpdateTicketTypeInput,
+} = require('../validators/ticketTypeValidator')
 
 async function listEvents(req, res) {
   const events = await eventService.listAdminEvents()
@@ -36,6 +40,37 @@ async function updateEventStatus(req, res) {
   return res.status(200).json({ success: true, data: serializeEvent(event) })
 }
 
-function createTicketType(req, res) { return notImplemented(res, 'Creating a ticket type') }
+async function listTicketTypes(req, res) {
+  validateEventId(req.params.eventId)
+  const ticketTypes = await ticketTypeService.listTicketTypes(req.params.eventId)
+  if (!ticketTypes) throw new AppError('Event not found.', 404)
+  return res.status(200).json({ success: true, data: ticketTypes })
+}
 
-module.exports = { listEvents, createEvent, updateEvent, updateEventStatus, createTicketType }
+async function createTicketType(req, res) {
+  const input = normalizeCreateTicketTypeInput(req.params.eventId, req.body)
+  const ticketType = await ticketTypeService.createTicketType(req.params.eventId, input)
+  if (!ticketType) throw new AppError('Event not found.', 404)
+  return res.status(201).json({ success: true, data: ticketType })
+}
+
+async function updateTicketType(req, res) {
+  const input = normalizeUpdateTicketTypeInput(req.params.eventId, req.params.ticketTypeId, req.body)
+  const ticketType = await ticketTypeService.updateTicketType(
+    req.params.eventId,
+    req.params.ticketTypeId,
+    input,
+  )
+  if (!ticketType) throw new AppError('Ticket type not found for this event.', 404)
+  return res.status(200).json({ success: true, data: ticketType })
+}
+
+module.exports = {
+  listEvents,
+  createEvent,
+  updateEvent,
+  updateEventStatus,
+  listTicketTypes,
+  createTicketType,
+  updateTicketType,
+}
