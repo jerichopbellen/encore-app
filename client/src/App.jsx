@@ -1,4 +1,5 @@
 
+import { useState } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router'
 import Navbar from './components/layout/Navbar'
 import Footer from './components/layout/Footer'
@@ -11,18 +12,25 @@ import CheckoutPage from './pages/checkout/CheckoutPage'
 import BookingConfirmationPage from './pages/bookings/BookingConfirmationPage'
 import BookingsPage from './pages/bookings/BookingsPage'
 import AdminEventsPage from './pages/admin/AdminEventsPage'
+import AdminEventCreatePage from './pages/admin/AdminEventCreatePage'
+import AdminEventManagePage from './pages/admin/AdminEventManagePage'
 import AdminDashboardPage from './pages/admin/AdminDashboardPage'
+import AdminRouteGuard from './components/admin/AdminRouteGuard'
 import AccountLayout from './pages/account/AccountLayout'
 import './App.css'
 
 function App() {
   const location = useLocation()
   const isDiscoverPage = location.pathname === '/'
+  const [mobileMenuLayout, setMobileMenuLayout] = useState({ isOpen: false, height: 0 })
 
   return (
     <div className="app">
-      <div className={`app__primary${isDiscoverPage ? ' app__primary--discover' : ''}`}>
-        <Navbar />
+      <div
+        className={`app__primary${isDiscoverPage ? ' app__primary--discover' : ''}${mobileMenuLayout.isOpen ? ' app__primary--mobile-menu-open' : ''}`}
+        style={mobileMenuLayout.isOpen ? { '--mobile-menu-height': `${mobileMenuLayout.height}px` } : undefined}
+      >
+        <Navbar onMobileMenuLayoutChange={setMobileMenuLayout} />
 
         <main className="app__content">
           <Routes>
@@ -42,7 +50,9 @@ function App() {
             <Route path="/bookings" element={<Navigate to="/account/bookings" replace />} />
             <Route path="/bookings/:bookingId" element={<BookingConfirmationPage />} />
             <Route path="/admin" element={<AdminDashboardPage />} />
-            <Route path="/admin/events" element={<AdminEventsPage />} />
+            <Route path="/admin/events" element={<AdminRouteGuard><AdminEventsPage /></AdminRouteGuard>} />
+            <Route path="/admin/events/new" element={<AdminRouteGuard><AdminEventCreatePage /></AdminRouteGuard>} />
+            <Route path="/admin/events/:eventId" element={<AdminRouteGuard><AdminEventManagePage /></AdminRouteGuard>} />
 
             {/* Temporary fallback until we add more routes. */}
             <Route path="*" element={<Navigate to="/" replace />} />

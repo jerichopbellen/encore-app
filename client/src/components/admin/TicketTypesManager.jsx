@@ -8,6 +8,20 @@ import { formatPrice } from '../../utils/eventDisplay'
 
 const emptyDraft = { name: '', price: '', total_quantity: '' }
 
+function normalizePrice(value) {
+  if (String(value).trim() === '') return null
+  const amount = Number(value)
+  return Number.isFinite(amount) ? Math.round(amount * 100) : null
+}
+
+function draftsMatch(left, right) {
+  const leftQuantity = String(left.total_quantity).trim() === '' ? null : Number(left.total_quantity)
+  const rightQuantity = String(right.total_quantity).trim() === '' ? null : Number(right.total_quantity)
+  return left.name.trim() === right.name.trim()
+    && normalizePrice(left.price) === normalizePrice(right.price)
+    && leftQuantity === rightQuantity
+}
+
 function TicketTypeForm({ draft, setDraft, onSubmit, onCancel, isSaving, isEditing }) {
   return (
     <form className="admin-ticket-form" onSubmit={onSubmit}>
@@ -58,7 +72,7 @@ function TicketTypeForm({ draft, setDraft, onSubmit, onCancel, isSaving, isEditi
   )
 }
 
-function TicketTypesManager({ eventId, onTicketTypesChange }) {
+function TicketTypesManager({ eventId, onUnsavedChange = () => {} }) {
   const [ticketTypes, setTicketTypes] = useState([])
   const [loadState, setLoadState] = useState('loading')
   const [loadError, setLoadError] = useState('')
@@ -68,6 +82,14 @@ function TicketTypesManager({ eventId, onTicketTypesChange }) {
   const [editingId, setEditingId] = useState(null)
   const [draft, setDraft] = useState(emptyDraft)
   const [isSaving, setIsSaving] = useState(false)
+  const [originalDraft, setOriginalDraft] = useState(emptyDraft)
+
+  const isFormOpen = showCreateForm || Boolean(editingId)
+  const isDirty = isFormOpen && !draftsMatch(draft, originalDraft)
+
+  useEffect(() => {
+    onUnsavedChange(isDirty)
+  }, [isDirty, onUnsavedChange])
 
   useEffect(() => {
     let isCurrent = true
@@ -75,7 +97,6 @@ function TicketTypesManager({ eventId, onTicketTypesChange }) {
       .then((data) => {
         if (!isCurrent) return
         setTicketTypes(data)
-        onTicketTypesChange(eventId, data)
         setLoadState('success')
       })
       .catch((error) => {
@@ -85,11 +106,12 @@ function TicketTypesManager({ eventId, onTicketTypesChange }) {
         }
       })
     return () => { isCurrent = false }
-  }, [eventId, onTicketTypesChange])
+  }, [eventId])
 
   function beginCreate() {
     setEditingId(null)
     setDraft(emptyDraft)
+    setOriginalDraft(emptyDraft)
     setSaveError('')
     setNotice('')
     setShowCreateForm(true)
@@ -103,15 +125,22 @@ function TicketTypesManager({ eventId, onTicketTypesChange }) {
       price: ticketType.price,
       total_quantity: String(ticketType.total_quantity),
     })
+    setOriginalDraft({
+      name: ticketType.name,
+      price: String(ticketType.price),
+      total_quantity: String(ticketType.total_quantity),
+    })
     setSaveError('')
     setNotice('')
   }
 
   function cancelForm() {
     if (isSaving) return
+    if (isDirty && !window.confirm('Discard these ticket type changes?')) return
     setShowCreateForm(false)
     setEditingId(null)
     setDraft(emptyDraft)
+    setOriginalDraft(emptyDraft)
     setSaveError('')
   }
 
@@ -135,11 +164,11 @@ function TicketTypesManager({ eventId, onTicketTypesChange }) {
         ? ticketTypes.map((ticketType) => ticketType.id === saved.id ? saved : ticketType)
         : [...ticketTypes, saved].sort((left, right) => left.name.localeCompare(right.name))
       setTicketTypes(nextTypes)
-      onTicketTypesChange(eventId, nextTypes)
       setNotice(editingId ? 'Ticket type updated.' : 'Ticket type created.')
       setShowCreateForm(false)
       setEditingId(null)
       setDraft(emptyDraft)
+      setOriginalDraft(emptyDraft)
     } catch (error) {
       setSaveError(error.message)
     } finally {
@@ -159,6 +188,8 @@ function TicketTypesManager({ eventId, onTicketTypesChange }) {
           {showCreateForm ? 'Close form' : 'Add ticket type'}
         </button>
       </header>
+
+      {isDirty && <p className="admin-form__unsaved" role="status">Unsaved ticket type changes</p>}
 
       {loadError && <p className="admin-ticket-manager__error" role="alert">{loadError}</p>}
       {saveError && <p className="admin-ticket-manager__error" role="alert">{saveError}</p>}
