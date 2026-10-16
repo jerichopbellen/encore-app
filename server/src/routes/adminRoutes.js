@@ -7,6 +7,7 @@ const router = express.Router()
 // Protect the whole route group so future admin endpoints inherit this boundary.
 router.use(requireAuthentication, requireAdministrator)
 
+router.get('/dashboard', adminController.getDashboard)
 router.get('/events', adminController.listEvents)
 router.post('/events', adminController.createEvent)
 router.patch('/events/:eventId', adminController.updateEvent)

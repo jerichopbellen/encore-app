@@ -262,6 +262,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
 
     await t.test('admin routes enforce current database role for every endpoint', async () => {
       const endpoints = [
+        { method: 'GET', path: '/api/admin/dashboard' },
         { method: 'GET', path: '/api/admin/events' },
         { method: 'POST', path: '/api/admin/events' },
         { method: 'PATCH', path: `/api/admin/events/${randomUUID()}` },
@@ -294,12 +295,21 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
           cookie: fixture.account.cookie,
           ...endpointBody,
         })
-        const expectedStatus = endpoint.method === 'GET' && endpoint.path === '/api/admin/events'
+        const expectedStatus = endpoint.method === 'GET' && ['/api/admin/dashboard', '/api/admin/events'].includes(endpoint.path)
           ? 200
           : endpoint.method === 'GET' && endpoint.path.endsWith('/ticket-types') ? 404 : 400
         assert.equal(authorized.response.status, expectedStatus, 'An administrator should reach the protected route handler')
         assert.equal(authorized.payload.success, expectedStatus === 200)
       }
+
+      const emptyDashboard = await request('/api/admin/dashboard', { cookie: fixture.account.cookie })
+      assert.equal(emptyDashboard.response.status, 200)
+      assert.deepEqual(emptyDashboard.payload.data.event_counts, { total: 0, published: 0, draft: 0 })
+      assert.deepEqual(emptyDashboard.payload.data.ticket_inventory, {
+        ticket_type_count: 0, total_capacity: 0, available_quantity: 0,
+      })
+      assert.equal(emptyDashboard.payload.data.confirmed_booking_count, 0)
+      assert.deepEqual(emptyDashboard.payload.data.upcoming_events, [])
 
       await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'customer' } })
       const revoked = await request('/api/admin/events', {
@@ -557,6 +567,39 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
           method: 'PATCH', cookie: fixture.account.cookie, body: { starts_at: legacyPastStart.toISOString() },
         })
         assert.equal(explicitPastLegacyEdit.response.status, 400)
+
+        const dashboardEvent = await createEvent('Upcoming Dashboard Event', 'published')
+        const inventoryBeforeDashboard = await prisma.ticket_types.findMany({
+          where: { event_id: managedEventId },
+          orderBy: { id: 'asc' },
+          select: { id: true, total_quantity: true, available_quantity: true },
+        })
+        const reservationsBeforeDashboard = await prisma.reservations.findMany({
+          orderBy: { id: 'asc' },
+          select: { id: true, status: true, expires_at: true },
+        })
+        const dashboardResult = await request('/api/admin/dashboard', { cookie: fixture.account.cookie })
+        assert.equal(dashboardResult.response.status, 200)
+        assert.deepEqual(dashboardResult.payload.data.event_counts, { total: 2, published: 1, draft: 1 })
+        assert.deepEqual(dashboardResult.payload.data.ticket_inventory, {
+          ticket_type_count: 2, total_capacity: 4, available_quantity: 2,
+        })
+        assert.deepEqual(dashboardResult.payload.data.reservation_counts, {
+          pending: 0, cancelled: 0, expired: 1, confirmed: 1,
+          pending_expired: 0, other: 0, total: 2,
+        })
+        assert.equal(dashboardResult.payload.data.confirmed_booking_count, 1)
+        assert.deepEqual(dashboardResult.payload.data.upcoming_events.map(({ id }) => id), [dashboardEvent.id])
+        assert.deepEqual(await prisma.ticket_types.findMany({
+          where: { event_id: managedEventId },
+          orderBy: { id: 'asc' },
+          select: { id: true, total_quantity: true, available_quantity: true },
+        }), inventoryBeforeDashboard, 'Dashboard reads must not modify inventory')
+        assert.deepEqual(await prisma.reservations.findMany({
+          orderBy: { id: 'asc' },
+          select: { id: true, status: true, expires_at: true },
+        }), reservationsBeforeDashboard, 'Dashboard reads must not modify reservation state')
+        assert.equal(reservationsBeforeDashboard.find(({ id }) => id === expiringReservationId).status, 'expired')
 
         const raceEvent = await createEvent('Admin Inventory Race Event')
         const raceTicket = await createTicketType(raceEvent.id)

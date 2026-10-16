@@ -1,6 +1,7 @@
 const AppError = require('../utils/AppError')
 const eventService = require('../services/eventService')
 const ticketTypeService = require('../services/ticketTypeService')
+const dashboardService = require('../services/dashboardService')
 const { serializeEvent } = require('../utils/eventSerializer')
 const {
   normalizeCreateEventInput,
@@ -16,6 +17,11 @@ const {
 async function listEvents(req, res) {
   const events = await eventService.listAdminEvents()
   return res.status(200).json({ success: true, data: events.map(serializeEvent) })
+}
+
+async function getDashboard(req, res) {
+  const dashboard = await dashboardService.getDashboardOverview()
+  return res.status(200).json({ success: true, data: dashboard })
 }
 
 async function createEvent(req, res) {
@@ -66,6 +72,7 @@ async function updateTicketType(req, res) {
 }
 
 module.exports = {
+  getDashboard,
   listEvents,
   createEvent,
   updateEvent,
