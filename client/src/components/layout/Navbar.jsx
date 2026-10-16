@@ -29,12 +29,21 @@ function Navbar() {
             <>
               <span className="navbar__session">Hi, {user.name}</span>
               {user.role === 'admin' && (
-                <NavLink
-                  to="/admin/events"
-                  className={({ isActive }) => isActive ? 'navbar__admin navbar__admin--active' : 'navbar__admin'}
-                >
-                  Admin events
-                </NavLink>
+                <>
+                  <NavLink
+                    to="/admin"
+                    end
+                    className={({ isActive }) => isActive ? 'navbar__admin navbar__admin--active' : 'navbar__admin'}
+                  >
+                    Admin dashboard
+                  </NavLink>
+                  <NavLink
+                    to="/admin/events"
+                    className={({ isActive }) => isActive ? 'navbar__admin navbar__admin--active' : 'navbar__admin'}
+                  >
+                    Admin events
+                  </NavLink>
+                </>
               )}
               <NavLink
                 to="/profile"
