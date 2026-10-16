@@ -1,6 +1,6 @@
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
-async function requestEventsApi(path) {
+async function requestEventsApi(path, isListRequest = false) {
   let response
 
   try {
@@ -19,8 +19,8 @@ async function requestEventsApi(path) {
     throw error
   }
 
-  const validData = path === ''
-    ? Array.isArray(payload?.data)
+  const validData = isListRequest
+    ? Array.isArray(payload?.data?.events) && payload?.data?.pagination && !Array.isArray(payload.data.pagination)
     : payload?.data && !Array.isArray(payload.data)
 
   if (!payload?.success || !validData) {
@@ -30,8 +30,11 @@ async function requestEventsApi(path) {
   return payload.data
 }
 
-export function getEvents() {
-  return requestEventsApi('')
+export function getEvents({ page = 1, pageSize = 12, search = '', availableOnly = false, sort = 'soonest' } = {}) {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize), sort })
+  if (search.trim()) query.set('q', search.trim())
+  if (availableOnly) query.set('available', 'true')
+  return requestEventsApi(`?${query}`, true)
 }
 
 export function getEvent(id) {

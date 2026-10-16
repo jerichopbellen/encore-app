@@ -27,7 +27,7 @@ function getStatusClass(status) {
   return Object.hasOwn(reservationStatusLabels, status) ? status : 'other'
 }
 
-function ReservationsPage() {
+function ReservationsPage({ embedded = false }) {
   const { user, isLoading: isAuthLoading } = useAuth()
   const [loadState, setLoadState] = useState({ status: 'loading' })
   const [retryCount, setRetryCount] = useState(0)
@@ -53,12 +53,12 @@ function ReservationsPage() {
   if (!user) return <Navigate to="/login" replace />
 
   return (
-    <section className="reservations-page" aria-labelledby="reservations-title">
-      <header className="reservations-page__heading">
+    <section className="reservations-page" aria-labelledby={embedded ? undefined : 'reservations-title'}>
+      {!embedded && <header className="reservations-page__heading">
         <p className="eyebrow">YOUR ENCORE ACCOUNT</p>
         <h1 id="reservations-title">My reservations</h1>
         <p>Review your ticket holds and reservation details.</p>
-      </header>
+      </header>}
 
       {loadState.status === 'loading' ? (
         <div className="reservations-state" role="status" aria-live="polite">

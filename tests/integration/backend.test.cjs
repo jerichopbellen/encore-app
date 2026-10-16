@@ -78,13 +78,13 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
     return { id: registration.payload.data.user.id, email, password, cookie: cookieFromLogin(login.response) }
   }
 
-  async function createEvent(title, status = 'published') {
+  async function createEvent(title, status = 'published', startsAt = new Date(Date.now() + 86400000)) {
     const event = await prisma.events.create({
       data: {
         title: `${title} ${randomUUID()}`,
         description: 'Automated test fixture',
         venue: 'Encore Test Hall',
-        starts_at: new Date(Date.now() + 86400000),
+        starts_at: startsAt,
         status,
       },
     })
@@ -370,7 +370,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         assert.ok(adminList.payload.data.some((item) => item.id === managedEventId && item.status === 'draft'))
 
         const publicListWhileDraft = await request('/api/events')
-        assert.equal(publicListWhileDraft.payload.data.some((item) => item.id === managedEventId), false)
+        assert.equal(publicListWhileDraft.payload.data.events.some((item) => item.id === managedEventId), false)
         const publicDetailWhileDraft = await request(`/api/events/${managedEventId}`)
         assert.equal(publicDetailWhileDraft.response.status, 404)
 
@@ -459,7 +459,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         assert.equal(published.response.status, 200)
         assert.equal(published.payload.data.status, 'published')
         const publicListAfterPublish = await request('/api/events')
-        assert.ok(publicListAfterPublish.payload.data.some((item) => item.id === managedEventId))
+        assert.ok(publicListAfterPublish.payload.data.events.some((item) => item.id === managedEventId))
         const publicDetailAfterPublish = await request(`/api/events/${managedEventId}`)
         assert.equal(publicDetailAfterPublish.response.status, 200)
 
@@ -552,7 +552,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         assert.equal(unpublished.response.status, 200)
         assert.equal(unpublished.payload.data.status, 'draft')
         const publicListAfterUnpublish = await request('/api/events')
-        assert.equal(publicListAfterUnpublish.payload.data.some((item) => item.id === managedEventId), false)
+        assert.equal(publicListAfterUnpublish.payload.data.events.some((item) => item.id === managedEventId), false)
         const publicDetailAfterUnpublish = await request(`/api/events/${managedEventId}`)
         assert.equal(publicDetailAfterUnpublish.response.status, 404)
 
@@ -637,6 +637,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       }
     })
 
+    const previouslyPublishedEventCount = await prisma.events.count({ where: { status: 'published' } })
     const event = await createEvent('Published Integration Event')
     const unpublishedEvent = await createEvent('Unpublished Integration Event', 'draft')
     const ticket = await createTicketType(event.id)
@@ -646,9 +647,15 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
     await t.test('public events expose published fixtures and their ticket data', async () => {
       const list = await request('/api/events')
       assert.equal(list.response.status, 200)
-      const published = list.payload.data.find((item) => item.id === event.id)
+      const published = list.payload.data.events.find((item) => item.id === event.id)
       assert.ok(published)
-      assert.equal(list.payload.data.some((item) => item.id === unpublishedEvent.id), false)
+      assert.equal(list.payload.data.events.some((item) => item.id === unpublishedEvent.id), false)
+      assert.deepEqual(list.payload.data.pagination, {
+        page: 1,
+        page_size: 12,
+        total_events: previouslyPublishedEventCount + 2,
+        total_pages: 1,
+      })
       assert.equal(published.ticket_types[0].id, ticket.id)
       assert.equal(published.ticket_types[0].price, '12.35')
       assert.equal(published.ticket_types[0].available_quantity, 8)
@@ -660,6 +667,54 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       assert.equal(missing.response.status, 404)
       const unpublished = await request(`/api/events/${unpublishedEvent.id}`)
       assert.equal(unpublished.response.status, 404)
+    })
+
+    await t.test('public catalogue search, availability, sorting, and pagination combine safely', async () => {
+      const defaultPage = await request('/api/events?page_size=1')
+      assert.equal(defaultPage.response.status, 200)
+      assert.equal(defaultPage.payload.data.pagination.page_size, 1)
+      assert.equal(defaultPage.payload.data.pagination.total_events, previouslyPublishedEventCount + 2)
+      assert.equal(defaultPage.payload.data.pagination.total_pages, previouslyPublishedEventCount + 2)
+      const nextPage = await request('/api/events?page=2&page_size=1')
+      assert.equal(nextPage.response.status, 200)
+      assert.notEqual(defaultPage.payload.data.events[0].id, nextPage.payload.data.events[0].id)
+      const outOfRangePage = await request(`/api/events?page=${Number.MAX_SAFE_INTEGER}&page_size=48`)
+      assert.equal(outOfRangePage.response.status, 200)
+      assert.deepEqual(outOfRangePage.payload.data.events, [])
+      assert.equal(outOfRangePage.payload.data.pagination.page, Number.MAX_SAFE_INTEGER)
+
+      const titleSearch = await request(`/api/events?q=${encodeURIComponent(event.title)}`)
+      assert.deepEqual(titleSearch.payload.data.events.map(({ id }) => id), [event.id])
+      const venueSearch = await request('/api/events?q=Encore%20Test%20Hall')
+      assert.ok(venueSearch.payload.data.pagination.total_events >= 2)
+
+      await prisma.ticket_types.update({ where: { id: ticket.id }, data: { available_quantity: 0 } })
+      const combined = await request(`/api/events?q=${encodeURIComponent(secondEvent.title)}&available=true&sort=latest&page=1&page_size=1`)
+      assert.equal(combined.response.status, 200)
+      assert.equal(combined.payload.data.pagination.total_events, 1)
+      assert.equal(combined.payload.data.events[0].id, secondEvent.id)
+      const empty = await request('/api/events?q=there-is-no-such-event')
+      assert.equal(empty.response.status, 200)
+      assert.deepEqual(empty.payload.data.events, [])
+      assert.equal(empty.payload.data.pagination.total_pages, 0)
+
+      await prisma.ticket_types.update({ where: { id: ticket.id }, data: { available_quantity: 8 } })
+
+      for (const query of ['page=0', 'page_size=49', 'sort=price', 'available=yes', 'unknown=true']) {
+        const invalid = await request(`/api/events?${query}`)
+        assert.equal(invalid.response.status, 400, `Expected query ${query} to be rejected.`)
+      }
+
+      const tieStart = new Date(Date.now() + 2 * 86400000)
+      const tiedEvents = await Promise.all([
+        createEvent('Tie Break Page Event', 'published', tieStart),
+        createEvent('Tie Break Page Event', 'published', tieStart),
+      ])
+      const sortedIds = tiedEvents.map(({ id }) => id).sort()
+      const firstTiePage = await request('/api/events?q=Tie%20Break%20Page%20Event&page_size=1')
+      const secondTiePage = await request('/api/events?q=Tie%20Break%20Page%20Event&page=2&page_size=1')
+      assert.equal(firstTiePage.payload.data.events[0].id, sortedIds[0])
+      assert.equal(secondTiePage.payload.data.events[0].id, sortedIds[1])
     })
 
     await t.test('reservation validation, trusted prices, ownership, and cancellation', async () => {

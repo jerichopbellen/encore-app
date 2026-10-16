@@ -100,14 +100,14 @@ function CheckoutPage() {
 
   return (
     <section className="checkout-page" aria-labelledby="checkout-title">
-      <Link className="event-details__back" to="/reservations">← My reservations</Link>
+      <Link className="event-details__back" to="/account/reservations">← My reservations</Link>
       <header className="checkout-page__heading">
         <p className="eyebrow">SECURE YOUR PLANS</p>
         <h1 id="checkout-title">Review your tickets</h1>
         <p>Confirm this reservation to create your Encore booking. No payment will be charged in this simulated checkout.</p>
       </header>
       {loadState === 'loading' ? <p className="event-page-state" role="status">Loading reservation…</p> : null}
-      {loadState === 'error' ? <div className="checkout-state" role="alert"><p>{error}</p><Link className="button-link" to="/reservations">Return to reservations</Link></div> : null}
+      {loadState === 'error' ? <div className="checkout-state" role="alert"><p>{error}</p><Link className="button-link" to="/account/reservations">Return to reservations</Link></div> : null}
       {loadState === 'success' && reservation ? (
         <article className="checkout-card">
           <div className="checkout-card__header">
@@ -125,7 +125,7 @@ function CheckoutPage() {
               {isSubmitting ? 'Confirming…' : reservation.status === 'confirmed' ? 'Recover booking confirmation' : 'Confirm simulated checkout'}
             </button>
           ) : (
-            <p className="checkout-state__note">This reservation cannot be checked out. {reservation.status === 'confirmed' ? <Link to="/bookings">View your bookings</Link> : <Link to="/reservations">View your reservations</Link>}.</p>
+            <p className="checkout-state__note">This reservation cannot be checked out. {reservation.status === 'confirmed' ? <Link to="/account/bookings">View your bookings</Link> : <Link to="/account/reservations">View your reservations</Link>}.</p>
           )}
           {reservation.status === 'pending' && <p className="checkout-card__expiry">Hold expires {formatDate(reservation.expires_at)}. The server will re-check availability when you confirm.</p>}
         </article>

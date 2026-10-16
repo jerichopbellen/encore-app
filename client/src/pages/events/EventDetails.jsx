@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router'
 import { getEvent } from '../../services/eventsApi'
 import { formatEventDate, formatPrice, getStartingPrice } from '../../utils/eventDisplay'
 import EventReservationPanel from '../../components/events/EventReservationPanel'
+import EventArtwork from '../../components/events/EventArtwork'
 
 function EventDetails() {
   const { id } = useParams()
@@ -74,11 +75,7 @@ function EventDetails() {
   return (
     <article className="event-details">
       <Link className="event-details__back" to="/">← All events</Link>
-      <div className="event-details__hero event-card__art--violet">
-        <span className="event-card__category">Event</span>
-        <span className="event-details__hero-mark" aria-hidden="true">✦</span>
-        <span className="event-details__hero-artist">{event.venue}</span>
-      </div>
+      <EventArtwork event={event} variant="detail" />
       <div className="event-details__content">
         <div>
           <p className="eyebrow">{event.venue}</p>

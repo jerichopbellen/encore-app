@@ -3,14 +3,19 @@ const eventService = require('../services/eventService')
 const reservationService = require('../services/reservationService')
 const { serializeEvent } = require('../utils/eventSerializer')
 const { validateEventId } = require('../validators/eventValidator')
+const { normalizeCatalogueQuery } = require('../validators/catalogueValidator')
 
 async function listEvents(req, res) {
+  const query = normalizeCatalogueQuery(req.query)
   await reservationService.releaseExpiredReservations()
-  const events = await eventService.listPublishedEvents()
+  const result = await eventService.listPublishedEvents(query)
 
   return res.status(200).json({
     success: true,
-    data: events.map(serializeEvent),
+    data: {
+      events: result.events.map(serializeEvent),
+      pagination: result.pagination,
+    },
   })
 }
 
