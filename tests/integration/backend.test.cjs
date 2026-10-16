@@ -179,6 +179,22 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       fixture.account = await createAccount('Test Customer')
       fixture.otherAccount = await createAccount('Second Customer')
 
+      const escalationEmail = `encore-test-escalation-${randomUUID()}@example.test`
+      fixture.emails.push(escalationEmail)
+      const attemptedEscalation = await request('/api/auth/register', {
+        method: 'POST',
+        body: {
+          name: 'Attempted Administrator',
+          email: escalationEmail,
+          password: randomBytes(24).toString('base64url'),
+          role: 'admin',
+          isAdmin: true,
+        },
+      })
+      assert.equal(attemptedEscalation.response.status, 201)
+      assert.equal(attemptedEscalation.payload.data.user.role, 'customer')
+      fixture.userIds.push(attemptedEscalation.payload.data.user.id)
+
       const duplicate = await request('/api/auth/register', {
         method: 'POST',
         body: { name: 'Duplicate', email: fixture.account.email, password: fixture.account.password },
@@ -217,6 +233,15 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       })
       assert.equal(invalidProfile.response.status, 400)
 
+      const profileEscalation = await request('/api/auth/me', {
+        method: 'PATCH',
+        cookie: fixture.account.cookie,
+        body: { name: 'Updated Test Customer', role: 'admin', isAdmin: true },
+      })
+      assert.equal(profileEscalation.response.status, 200)
+      assert.equal(profileEscalation.payload.data.user.role, 'customer')
+      assert.equal((await prisma.users.findUnique({ where: { id: fixture.account.id } })).role, 'customer')
+
       const otherSession = await request('/api/auth/me', { cookie: fixture.otherAccount.cookie })
       assert.equal(otherSession.payload.data.user.name, 'Second Customer')
 
@@ -233,6 +258,48 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         body: { email: fixture.account.email, password: fixture.account.password },
       })
       fixture.account.cookie = cookieFromLogin(relogin.response)
+    })
+
+    await t.test('admin routes enforce current database role for every endpoint', async () => {
+      const endpoints = [
+        { method: 'POST', path: '/api/admin/events' },
+        { method: 'PATCH', path: `/api/admin/events/${randomUUID()}` },
+        { method: 'PATCH', path: `/api/admin/events/${randomUUID()}/status` },
+        { method: 'POST', path: `/api/admin/events/${randomUUID()}/ticket-types` },
+      ]
+
+      for (const endpoint of endpoints) {
+        const unauthenticated = await request(endpoint.path, { method: endpoint.method, body: {} })
+        assert.equal(unauthenticated.response.status, 401, `${endpoint.method} ${endpoint.path} should require authentication`)
+
+        const customer = await request(endpoint.path, {
+          method: endpoint.method,
+          cookie: fixture.account.cookie,
+          body: {},
+        })
+        assert.equal(customer.response.status, 403, `${endpoint.method} ${endpoint.path} should reject customers`)
+        assert.equal(customer.payload.message, 'Administrator access is required.')
+      }
+
+      // The same session becomes an admin only because the trusted database row changes.
+      await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'admin' } })
+      for (const endpoint of endpoints) {
+        const authorized = await request(endpoint.path, {
+          method: endpoint.method,
+          cookie: fixture.account.cookie,
+          body: {},
+        })
+        assert.equal(authorized.response.status, 501, 'An administrator should reach the unchanged placeholder controller')
+        assert.equal(authorized.payload.success, false)
+      }
+
+      await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'customer' } })
+      const revoked = await request('/api/admin/events', {
+        method: 'POST',
+        cookie: fixture.account.cookie,
+        body: {},
+      })
+      assert.equal(revoked.response.status, 403, 'Role revocation should take effect for an existing session')
     })
 
     const event = await createEvent('Published Integration Event')

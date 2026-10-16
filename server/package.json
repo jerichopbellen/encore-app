@@ -8,7 +8,8 @@
     "test:integration": "node ../tests/run.cjs integration",
     "test:all": "npm test && npm run test:integration",
     "start": "node src/server.js",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "admin:promote": "node scripts/promote-admin.js"
   },
   "keywords": [],
   "author": "",

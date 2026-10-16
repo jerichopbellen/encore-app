@@ -14,7 +14,8 @@ async function registerUser({ name, email, password }) {
   const password_hash = await bcrypt.hash(password, 12)
 
   return prisma.users.create({
-    data: { name, email, password_hash },
+    // Public registration always creates a customer, regardless of request fields.
+    data: { name, email, password_hash, role: 'customer' },
     select: safeUserFields,
   })
 }
