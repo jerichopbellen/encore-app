@@ -10,6 +10,7 @@ import ReservationsPage from './pages/reservations/ReservationsPage'
 import CheckoutPage from './pages/checkout/CheckoutPage'
 import BookingConfirmationPage from './pages/bookings/BookingConfirmationPage'
 import BookingsPage from './pages/bookings/BookingsPage'
+import AdminEventsPage from './pages/admin/AdminEventsPage'
 import './App.css'
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
           <Route path="/reservations/:reservationId/checkout" element={<CheckoutPage />} />
           <Route path="/bookings" element={<BookingsPage />} />
           <Route path="/bookings/:bookingId" element={<BookingConfirmationPage />} />
+          <Route path="/admin/events" element={<AdminEventsPage />} />
 
           {/* Temporary fallback until we add more routes. */}
           <Route path="*" element={<Navigate to="/" replace />} />

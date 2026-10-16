@@ -37,4 +37,43 @@ async function getPublishedEventById(id) {
   })
 }
 
-module.exports = { listPublishedEvents, getPublishedEventById }
+async function listAdminEvents() {
+  const prisma = await getPrismaClient()
+  return prisma.events.findMany({
+    orderBy: { starts_at: 'asc' },
+    select: publicEventFields,
+  })
+}
+
+async function createEvent(data) {
+  const prisma = await getPrismaClient()
+  return prisma.events.create({
+    data,
+    select: publicEventFields,
+  })
+}
+
+async function updateEvent(id, data) {
+  const prisma = await getPrismaClient()
+  const existing = await prisma.events.findUnique({ where: { id }, select: { id: true } })
+  if (!existing) return null
+
+  return prisma.events.update({
+    where: { id },
+    data,
+    select: publicEventFields,
+  })
+}
+
+async function updateEventStatus(id, status) {
+  return updateEvent(id, { status })
+}
+
+module.exports = {
+  listPublishedEvents,
+  getPublishedEventById,
+  listAdminEvents,
+  createEvent,
+  updateEvent,
+  updateEventStatus,
+}

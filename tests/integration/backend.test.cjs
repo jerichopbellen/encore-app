@@ -262,6 +262,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
 
     await t.test('admin routes enforce current database role for every endpoint', async () => {
       const endpoints = [
+        { method: 'GET', path: '/api/admin/events' },
         { method: 'POST', path: '/api/admin/events' },
         { method: 'PATCH', path: `/api/admin/events/${randomUUID()}` },
         { method: 'PATCH', path: `/api/admin/events/${randomUUID()}/status` },
@@ -269,13 +270,14 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       ]
 
       for (const endpoint of endpoints) {
-        const unauthenticated = await request(endpoint.path, { method: endpoint.method, body: {} })
+        const endpointBody = endpoint.method === 'GET' ? {} : { body: {} }
+        const unauthenticated = await request(endpoint.path, { method: endpoint.method, ...endpointBody })
         assert.equal(unauthenticated.response.status, 401, `${endpoint.method} ${endpoint.path} should require authentication`)
 
         const customer = await request(endpoint.path, {
           method: endpoint.method,
           cookie: fixture.account.cookie,
-          body: {},
+          ...endpointBody,
         })
         assert.equal(customer.response.status, 403, `${endpoint.method} ${endpoint.path} should reject customers`)
         assert.equal(customer.payload.message, 'Administrator access is required.')
@@ -284,13 +286,17 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       // The same session becomes an admin only because the trusted database row changes.
       await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'admin' } })
       for (const endpoint of endpoints) {
+        const endpointBody = endpoint.method === 'GET' ? {} : { body: {} }
         const authorized = await request(endpoint.path, {
           method: endpoint.method,
           cookie: fixture.account.cookie,
-          body: {},
+          ...endpointBody,
         })
-        assert.equal(authorized.response.status, 501, 'An administrator should reach the unchanged placeholder controller')
-        assert.equal(authorized.payload.success, false)
+        const expectedStatus = endpoint.method === 'GET'
+          ? 200
+          : endpoint.path.endsWith('/ticket-types') ? 501 : 400
+        assert.equal(authorized.response.status, expectedStatus, 'An administrator should reach the protected route handler')
+        assert.equal(authorized.payload.success, expectedStatus === 200)
       }
 
       await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'customer' } })
@@ -300,6 +306,160 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         body: {},
       })
       assert.equal(revoked.response.status, 403, 'Role revocation should take effect for an existing session')
+    })
+
+    await t.test('admin event management validates input and preserves ticketing records', async () => {
+      await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'admin' } })
+      try {
+        const invalidCreate = await request('/api/admin/events', {
+          method: 'POST', cookie: fixture.account.cookie, body: { title: 'Missing fields' },
+        })
+        assert.equal(invalidCreate.response.status, 400)
+
+        const invalidDate = await request('/api/admin/events', {
+          method: 'POST',
+          cookie: fixture.account.cookie,
+          body: { title: 'Bad date', venue: 'Encore Hall', starts_at: 'not-a-date' },
+        })
+        assert.equal(invalidDate.response.status, 400)
+
+        const pastCreate = await request('/api/admin/events', {
+          method: 'POST',
+          cookie: fixture.account.cookie,
+          body: { title: 'Past event', venue: 'Encore Hall', starts_at: new Date(Date.now() - 60000).toISOString() },
+        })
+        assert.equal(pastCreate.response.status, 400)
+        assert.match(pastCreate.payload.message, /future/)
+
+        const unsupportedField = await request('/api/admin/events', {
+          method: 'POST',
+          cookie: fixture.account.cookie,
+          body: {
+            title: 'Unsupported status', venue: 'Encore Hall', starts_at: new Date(Date.now() + 86400000).toISOString(),
+            status: 'published',
+          },
+        })
+        assert.equal(unsupportedField.response.status, 400)
+
+        const startsAt = new Date(Date.now() + 7 * 86400000).toISOString()
+        const created = await request('/api/admin/events', {
+          method: 'POST',
+          cookie: fixture.account.cookie,
+          body: { title: 'Admin Managed Event', description: 'Initial description', venue: 'Encore Hall', starts_at: startsAt },
+        })
+        assert.equal(created.response.status, 201)
+        assert.equal(created.payload.data.status, 'draft')
+        assert.equal(created.payload.data.title, 'Admin Managed Event')
+        const managedEventId = created.payload.data.id
+        fixture.eventIds.push(managedEventId)
+
+        const adminList = await request('/api/admin/events', { cookie: fixture.account.cookie })
+        assert.equal(adminList.response.status, 200)
+        assert.ok(adminList.payload.data.some((item) => item.id === managedEventId && item.status === 'draft'))
+
+        const publicListWhileDraft = await request('/api/events')
+        assert.equal(publicListWhileDraft.payload.data.some((item) => item.id === managedEventId), false)
+        const publicDetailWhileDraft = await request(`/api/events/${managedEventId}`)
+        assert.equal(publicDetailWhileDraft.response.status, 404)
+
+        const emptyUpdate = await request(`/api/admin/events/${managedEventId}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: {},
+        })
+        assert.equal(emptyUpdate.response.status, 400)
+        const pastUpdate = await request(`/api/admin/events/${managedEventId}`, {
+          method: 'PATCH',
+          cookie: fixture.account.cookie,
+          body: { starts_at: new Date(Date.now() - 60000).toISOString() },
+        })
+        assert.equal(pastUpdate.response.status, 400)
+        assert.match(pastUpdate.payload.message, /future/)
+        const invalidId = await request('/api/admin/events/not-a-uuid', {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { title: 'Invalid id' },
+        })
+        assert.equal(invalidId.response.status, 400)
+        const invalidStatusId = await request('/api/admin/events/not-a-uuid/status', {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { status: 'published' },
+        })
+        assert.equal(invalidStatusId.response.status, 400)
+        const missingEventId = randomUUID()
+        const missingUpdate = await request(`/api/admin/events/${missingEventId}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { title: 'Missing event' },
+        })
+        assert.equal(missingUpdate.response.status, 404)
+        const invalidStatus = await request(`/api/admin/events/${managedEventId}/status`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { status: 'cancelled' },
+        })
+        assert.equal(invalidStatus.response.status, 400)
+
+        const ticketType = await createTicketType(managedEventId, 8)
+        await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'customer' } })
+        const forbiddenPublish = await request(`/api/admin/events/${managedEventId}/status`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { status: 'published' },
+        })
+        assert.equal(forbiddenPublish.response.status, 403)
+        await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'admin' } })
+
+        const published = await request(`/api/admin/events/${managedEventId}/status`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { status: 'published' },
+        })
+        assert.equal(published.response.status, 200)
+        assert.equal(published.payload.data.status, 'published')
+        const publicListAfterPublish = await request('/api/events')
+        assert.ok(publicListAfterPublish.payload.data.some((item) => item.id === managedEventId))
+        const publicDetailAfterPublish = await request(`/api/events/${managedEventId}`)
+        assert.equal(publicDetailAfterPublish.response.status, 200)
+
+        const reservation = await createReservation(fixture.account, managedEventId, ticketType.id, 2)
+        assert.equal(reservation.response.status, 201)
+        const reservationId = reservation.payload.data.reservation.id
+        const savedReservationItem = await prisma.reservation_items.findFirst({ where: { reservation_id: reservationId } })
+        const inventoryBeforeEdit = await prisma.ticket_types.findUnique({ where: { id: ticketType.id } })
+
+        const updatedStartsAt = new Date(Date.now() + 9 * 86400000).toISOString()
+        const updated = await request(`/api/admin/events/${managedEventId}`, {
+          method: 'PATCH',
+          cookie: fixture.account.cookie,
+          body: {
+            title: 'Admin Managed Event Updated',
+            description: 'Updated description',
+            venue: 'Encore Arena',
+            starts_at: updatedStartsAt,
+          },
+        })
+        assert.equal(updated.response.status, 200)
+        assert.equal(updated.payload.data.title, 'Admin Managed Event Updated')
+        assert.equal(updated.payload.data.venue, 'Encore Arena')
+        assert.equal(updated.payload.data.status, 'published')
+
+        const ticketAfterEdit = await prisma.ticket_types.findUnique({ where: { id: ticketType.id } })
+        assert.equal(ticketAfterEdit.total_quantity, inventoryBeforeEdit.total_quantity)
+        assert.equal(ticketAfterEdit.available_quantity, inventoryBeforeEdit.available_quantity)
+        assert.deepEqual(await prisma.reservation_items.findFirst({ where: { reservation_id: reservationId } }), savedReservationItem)
+
+        const unpublished = await request(`/api/admin/events/${managedEventId}/status`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { status: 'draft' },
+        })
+        assert.equal(unpublished.response.status, 200)
+        assert.equal(unpublished.payload.data.status, 'draft')
+        const publicListAfterUnpublish = await request('/api/events')
+        assert.equal(publicListAfterUnpublish.payload.data.some((item) => item.id === managedEventId), false)
+        const publicDetailAfterUnpublish = await request(`/api/events/${managedEventId}`)
+        assert.equal(publicDetailAfterUnpublish.response.status, 404)
+
+        const legacyPastStart = new Date(Date.now() - 60000)
+        await prisma.events.update({ where: { id: managedEventId }, data: { starts_at: legacyPastStart } })
+        const unrelatedLegacyEdit = await request(`/api/admin/events/${managedEventId}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { title: 'Legacy event title updated' },
+        })
+        assert.equal(unrelatedLegacyEdit.response.status, 200)
+        assert.equal(unrelatedLegacyEdit.payload.data.starts_at, legacyPastStart.toISOString())
+        const explicitPastLegacyEdit = await request(`/api/admin/events/${managedEventId}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { starts_at: legacyPastStart.toISOString() },
+        })
+        assert.equal(explicitPastLegacyEdit.response.status, 400)
+      } finally {
+        await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'customer' } })
+      }
     })
 
     const event = await createEvent('Published Integration Event')
