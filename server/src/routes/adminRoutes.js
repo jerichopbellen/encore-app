@@ -11,6 +11,8 @@ router.get('/events', adminController.listEvents)
 router.post('/events', adminController.createEvent)
 router.patch('/events/:eventId', adminController.updateEvent)
 router.patch('/events/:eventId/status', adminController.updateEventStatus)
+router.get('/events/:eventId/ticket-types', adminController.listTicketTypes)
 router.post('/events/:eventId/ticket-types', adminController.createTicketType)
+router.patch('/events/:eventId/ticket-types/:ticketTypeId', adminController.updateTicketType)
 
 module.exports = router

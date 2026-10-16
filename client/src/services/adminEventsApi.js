@@ -48,3 +48,21 @@ export function updateAdminEventStatus(eventId, status) {
     body: JSON.stringify({ status }),
   })
 }
+
+export function getAdminTicketTypes(eventId) {
+  return requestAdminEventsApi(`/${encodeURIComponent(eventId)}/ticket-types`)
+}
+
+export function createAdminTicketType(eventId, ticketType) {
+  return requestAdminEventsApi(`/${encodeURIComponent(eventId)}/ticket-types`, {
+    method: 'POST',
+    body: JSON.stringify(ticketType),
+  })
+}
+
+export function updateAdminTicketType(eventId, ticketTypeId, ticketType) {
+  return requestAdminEventsApi(`/${encodeURIComponent(eventId)}/ticket-types/${encodeURIComponent(ticketTypeId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(ticketType),
+  })
+}

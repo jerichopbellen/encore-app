@@ -1,5 +1,6 @@
 const AppError = require('../utils/AppError')
 const { getPrismaClient } = require('../config/prisma')
+const { lockTicketTypes } = require('./inventoryService')
 
 const RESERVATION_HOLD_MINUTES = 15
 const EXPIRY_BATCH_SIZE = 100
@@ -79,32 +80,34 @@ async function restoreInventoryForReservation(tx, reservationId) {
 }
 
 async function expirePendingReservations(tx, now) {
+  const dueReservations = await tx.reservations.findMany({
+    where: { status: 'pending', expires_at: { lte: now } },
+    orderBy: { expires_at: 'asc' },
+    select: { id: true },
+  })
+  if (dueReservations.length === 0) return 0
+
+  const reservationIds = dueReservations.map(({ id }) => id)
+  const expiredItems = await tx.reservation_items.findMany({
+    where: { reservation_id: { in: reservationIds } },
+    select: { ticket_type_id: true },
+  })
+  // Lock every affected ticket in a single sorted order before changing holds.
+  await lockTicketTypes(tx, expiredItems.map((item) => item.ticket_type_id))
+
   let expiredCount = 0
-
-  while (true) {
-    const dueReservations = await tx.reservations.findMany({
-      where: { status: 'pending', expires_at: { lte: now } },
-      orderBy: { expires_at: 'asc' },
-      take: EXPIRY_BATCH_SIZE,
-      select: { id: true },
-    })
-    if (dueReservations.length === 0) break
-
-    let claimedCount = 0
-    for (const reservation of dueReservations) {
+  for (let index = 0; index < dueReservations.length; index += EXPIRY_BATCH_SIZE) {
+    const batch = dueReservations.slice(index, index + EXPIRY_BATCH_SIZE)
+    for (const reservation of batch) {
       const claimed = await tx.reservations.updateMany({
         where: { id: reservation.id, status: 'pending', expires_at: { lte: now } },
         data: { status: 'expired' },
       })
       if (claimed.count === 0) continue
 
-      claimedCount += 1
       expiredCount += 1
       await restoreInventoryForReservation(tx, reservation.id)
     }
-
-    // Another request may have claimed the same batch while this transaction waited.
-    if (dueReservations.length < EXPIRY_BATCH_SIZE || claimedCount === 0) break
   }
 
   return expiredCount
@@ -195,12 +198,24 @@ async function cancelReservation(userId, reservationId) {
       select: { id: true, status: true, expires_at: true },
     })
     if (!reservation) return { outcome: 'not-found', reservation: null }
-    if (reservation.status !== 'pending') {
-      return { outcome: reservation.status === 'expired' ? 'expired' : 'not-pending' }
+
+    const reservationItems = await tx.reservation_items.findMany({
+      where: { reservation_id: reservationId },
+      select: { ticket_type_id: true },
+    })
+    await lockTicketTypes(tx, reservationItems.map((item) => item.ticket_type_id))
+    const currentReservation = await tx.reservations.findFirst({
+      where: { id: reservationId, user_id: userId },
+      select: { id: true, status: true, expires_at: true },
+    })
+    if (!currentReservation) return { outcome: 'not-found', reservation: null }
+    if (currentReservation.status !== 'pending') {
+      return { outcome: currentReservation.status === 'expired' ? 'expired' : 'not-pending' }
     }
 
+    const cancelNow = new Date()
     const cancelled = await tx.reservations.updateMany({
-      where: { id: reservationId, user_id: userId, status: 'pending', expires_at: { gt: now } },
+      where: { id: reservationId, user_id: userId, status: 'pending', expires_at: { gt: cancelNow } },
       data: { status: 'cancelled' },
     })
     if (cancelled.count === 0) {

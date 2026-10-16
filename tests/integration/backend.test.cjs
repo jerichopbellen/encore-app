@@ -267,6 +267,8 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         { method: 'PATCH', path: `/api/admin/events/${randomUUID()}` },
         { method: 'PATCH', path: `/api/admin/events/${randomUUID()}/status` },
         { method: 'POST', path: `/api/admin/events/${randomUUID()}/ticket-types` },
+        { method: 'GET', path: `/api/admin/events/${randomUUID()}/ticket-types` },
+        { method: 'PATCH', path: `/api/admin/events/${randomUUID()}/ticket-types/${randomUUID()}` },
       ]
 
       for (const endpoint of endpoints) {
@@ -292,9 +294,9 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
           cookie: fixture.account.cookie,
           ...endpointBody,
         })
-        const expectedStatus = endpoint.method === 'GET'
+        const expectedStatus = endpoint.method === 'GET' && endpoint.path === '/api/admin/events'
           ? 200
-          : endpoint.path.endsWith('/ticket-types') ? 501 : 400
+          : endpoint.method === 'GET' && endpoint.path.endsWith('/ticket-types') ? 404 : 400
         assert.equal(authorized.response.status, expectedStatus, 'An administrator should reach the protected route handler')
         assert.equal(authorized.payload.success, expectedStatus === 200)
       }
@@ -392,6 +394,48 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         assert.equal(invalidStatus.response.status, 400)
 
         const ticketType = await createTicketType(managedEventId, 8)
+        const createdTicketType = await request(`/api/admin/events/${managedEventId}/ticket-types`, {
+          method: 'POST',
+          cookie: fixture.account.cookie,
+          body: { name: 'VIP Balcony', price: '2500.50', total_quantity: 6 },
+        })
+        assert.equal(createdTicketType.response.status, 201)
+        assert.deepEqual(createdTicketType.payload.data, {
+          id: createdTicketType.payload.data.id,
+          event_id: managedEventId,
+          name: 'VIP Balcony',
+          price: '2500.50',
+          total_quantity: 6,
+          available_quantity: 6,
+        })
+        fixture.ticketTypeIds.push(createdTicketType.payload.data.id)
+
+        const ticketList = await request(`/api/admin/events/${managedEventId}/ticket-types`, { cookie: fixture.account.cookie })
+        assert.equal(ticketList.response.status, 200)
+        assert.equal(ticketList.payload.data.length, 2)
+        assert.ok(ticketList.payload.data.some((item) => item.id === createdTicketType.payload.data.id))
+
+        const duplicateName = await request(`/api/admin/events/${managedEventId}/ticket-types`, {
+          method: 'POST', cookie: fixture.account.cookie,
+          body: { name: 'VIP Balcony', price: '2500.50', total_quantity: 6 },
+        })
+        assert.equal(duplicateName.response.status, 409)
+        assert.match(duplicateName.payload.message, /already exists/)
+
+        const invalidTicket = await request(`/api/admin/events/${managedEventId}/ticket-types`, {
+          method: 'POST', cookie: fixture.account.cookie,
+          body: { name: 'Invalid', price: '1.999', total_quantity: 2 },
+        })
+        assert.equal(invalidTicket.response.status, 400)
+
+        const missingTicketType = await request(`/api/admin/events/${managedEventId}/ticket-types/${randomUUID()}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { name: 'Missing' },
+        })
+        assert.equal(missingTicketType.response.status, 404)
+        const crossEventTicketType = await request(`/api/admin/events/${randomUUID()}/ticket-types/${ticketType.id}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { name: 'Wrong event' },
+        })
+        assert.equal(crossEventTicketType.response.status, 404)
         await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'customer' } })
         const forbiddenPublish = await request(`/api/admin/events/${managedEventId}/status`, {
           method: 'PATCH', cookie: fixture.account.cookie, body: { status: 'published' },
@@ -413,7 +457,63 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         assert.equal(reservation.response.status, 201)
         const reservationId = reservation.payload.data.reservation.id
         const savedReservationItem = await prisma.reservation_items.findFirst({ where: { reservation_id: reservationId } })
+
+        const increasedCapacity = await request(`/api/admin/events/${managedEventId}/ticket-types/${ticketType.id}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { total_quantity: 12 },
+        })
+        assert.equal(increasedCapacity.response.status, 200)
+        assert.equal(increasedCapacity.payload.data.available_quantity, 10)
+
+        const reducedWithActiveHold = await request(`/api/admin/events/${managedEventId}/ticket-types/${ticketType.id}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { total_quantity: 7 },
+        })
+        assert.equal(reducedWithActiveHold.response.status, 200)
+        assert.equal(reducedWithActiveHold.payload.data.available_quantity, 5)
+
+        const tooSmallCapacity = await request(`/api/admin/events/${managedEventId}/ticket-types/${ticketType.id}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { total_quantity: 1 },
+        })
+        assert.equal(tooSmallCapacity.response.status, 409)
+        assert.match(tooSmallCapacity.payload.message, /2 tickets already committed/)
+        const afterRejectedCapacity = await prisma.ticket_types.findUnique({ where: { id: ticketType.id } })
+        assert.equal(afterRejectedCapacity.total_quantity, 7)
+        assert.equal(afterRejectedCapacity.available_quantity, 5)
+
+        const changedNameAndPrice = await request(`/api/admin/events/${managedEventId}/ticket-types/${ticketType.id}`, {
+          method: 'PATCH', cookie: fixture.account.cookie,
+          body: { name: 'Reserved Pass', price: '20.50' },
+        })
+        assert.equal(changedNameAndPrice.response.status, 200)
+        assert.equal(changedNameAndPrice.payload.data.available_quantity, 5)
+        assert.equal((await prisma.reservation_items.findUnique({ where: { id: savedReservationItem.id } })).unit_price.toFixed(2), '12.35')
+
+        const confirmedCheckout = await checkout(fixture.account, reservationId)
+        assert.equal(confirmedCheckout.response.status, 201)
+        assert.equal(confirmedCheckout.payload.data.booking.total_amount, '24.70')
+        const belowConfirmedInventory = await request(`/api/admin/events/${managedEventId}/ticket-types/${ticketType.id}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { total_quantity: 1 },
+        })
+        assert.equal(belowConfirmedInventory.response.status, 409)
+        assert.match(belowConfirmedInventory.payload.message, /2 tickets already committed/)
+        const safeReduction = await request(`/api/admin/events/${managedEventId}/ticket-types/${ticketType.id}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { total_quantity: 4 },
+        })
+        assert.equal(safeReduction.response.status, 200)
+        assert.equal(safeReduction.payload.data.available_quantity, 2)
+        assert.equal((await prisma.bookings.findUnique({ where: { reservation_id: reservationId } })).total_amount.toFixed(2), '24.70')
         const inventoryBeforeEdit = await prisma.ticket_types.findUnique({ where: { id: ticketType.id } })
+
+        const expiredHoldTicket = createdTicketType.payload.data
+        const expiringHold = await createReservation(fixture.account, managedEventId, expiredHoldTicket.id, 2)
+        assert.equal(expiringHold.response.status, 201)
+        const expiringReservationId = expiringHold.payload.data.reservation.id
+        await prisma.reservations.update({ where: { id: expiringReservationId }, data: { expires_at: new Date(Date.now() - 1000) } })
+        const capacityAfterExpiry = await request(`/api/admin/events/${managedEventId}/ticket-types/${expiredHoldTicket.id}`, {
+          method: 'PATCH', cookie: fixture.account.cookie, body: { total_quantity: 0 },
+        })
+        assert.equal(capacityAfterExpiry.response.status, 200)
+        assert.equal(capacityAfterExpiry.payload.data.available_quantity, 0)
+        assert.equal((await prisma.reservations.findUnique({ where: { id: expiringReservationId } })).status, 'expired')
 
         const updatedStartsAt = new Date(Date.now() + 9 * 86400000).toISOString()
         const updated = await request(`/api/admin/events/${managedEventId}`, {
@@ -457,6 +557,38 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
           method: 'PATCH', cookie: fixture.account.cookie, body: { starts_at: legacyPastStart.toISOString() },
         })
         assert.equal(explicitPastLegacyEdit.response.status, 400)
+
+        const raceEvent = await createEvent('Admin Inventory Race Event')
+        const raceTicket = await createTicketType(raceEvent.id)
+        const concurrentCapacity = makeBarrier(2)
+        const [reservationRace, capacityRace] = await Promise.all([
+          concurrentCapacity(() => createReservation(fixture.account, raceEvent.id, raceTicket.id, 2)),
+          concurrentCapacity(() => request(`/api/admin/events/${raceEvent.id}/ticket-types/${raceTicket.id}`, {
+            method: 'PATCH', cookie: fixture.account.cookie, body: { total_quantity: 1 },
+          })),
+        ])
+        assert.ok([reservationRace.response.status, capacityRace.response.status].every((status) => [200, 201, 409].includes(status)))
+        assert.equal(reservationRace.response.status === 201, capacityRace.response.status === 409)
+        const raceTicketAfter = await prisma.ticket_types.findUnique({ where: { id: raceTicket.id } })
+        const raceReservationCount = await prisma.reservation_items.aggregate({
+          where: { ticket_type_id: raceTicket.id, reservations: { status: 'pending', expires_at: { gt: new Date() } } },
+          _sum: { quantity: true },
+        })
+        const committedAfterRace = raceReservationCount._sum.quantity || 0
+        assert.equal(raceTicketAfter.available_quantity, raceTicketAfter.total_quantity - committedAfterRace)
+
+        const competingCapacity = makeBarrier(2)
+        const capacityResults = await Promise.all([5, 6].map((total_quantity) => competingCapacity(() => request(
+          `/api/admin/events/${raceEvent.id}/ticket-types/${raceTicket.id}`,
+          { method: 'PATCH', cookie: fixture.account.cookie, body: { total_quantity } },
+        ))))
+        assert.deepEqual(capacityResults.map((result) => result.response.status), [200, 200])
+        const finalRaceTicket = await prisma.ticket_types.findUnique({ where: { id: raceTicket.id } })
+        const finalCommitted = await prisma.reservation_items.aggregate({
+          where: { ticket_type_id: raceTicket.id, reservations: { status: 'pending', expires_at: { gt: new Date() } } },
+          _sum: { quantity: true },
+        })
+        assert.equal(finalRaceTicket.available_quantity, finalRaceTicket.total_quantity - (finalCommitted._sum.quantity || 0))
       } finally {
         await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'customer' } })
       }

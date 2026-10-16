@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router'
+import TicketTypesManager from '../../components/admin/TicketTypesManager'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   createAdminEvent,
@@ -94,6 +95,7 @@ function AdminEventsPage() {
   const submissionLock = useRef(false)
   const editingFormRef = useRef(null)
   const [pendingEventId, setPendingEventId] = useState(null)
+  const [ticketTypesEventId, setTicketTypesEventId] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [notice, setNotice] = useState('')
 
@@ -105,6 +107,12 @@ function AdminEventsPage() {
     return matchesQuery && (statusFilter === 'all' || event.status === statusFilter)
   })
   const hasActiveFilters = Boolean(searchQuery.trim()) || statusFilter !== 'all'
+
+  const handleTicketTypesChange = useCallback((eventId, ticketTypes) => {
+    setEvents((current) => current.map((event) => (
+      event.id === eventId ? { ...event, ticket_types: ticketTypes } : event
+    )))
+  }, [])
 
   useEffect(() => {
     if (isAuthLoading || user?.role !== 'admin') return undefined
@@ -294,7 +302,7 @@ function AdminEventsPage() {
             className="button-link"
             type="button"
             onClick={() => (isFormOpen && !editingEventId ? closeForm() : beginCreate())}
-            disabled={isSaving || Boolean(editingEventId)}
+            disabled={isSaving || Boolean(editingEventId) || Boolean(ticketTypesEventId)}
             aria-expanded={isFormOpen && !editingEventId}
             aria-controls="admin-event-create-form"
           >
@@ -399,13 +407,25 @@ function AdminEventsPage() {
                     {event.ticket_types.length > 0 && <p className="admin-event-card__tickets">{event.ticket_types.length} ticket {event.ticket_types.length === 1 ? 'type' : 'types'} configured</p>}
                   </div>
                   <div className="admin-event-card__actions">
-                    <button className="admin-events__secondary" type="button" onClick={() => beginEdit(event)} disabled={isSaving || (isFormOpen && !editingEventId)}>Edit details</button>
+                    <button className="admin-events__secondary" type="button" onClick={() => beginEdit(event)} disabled={isSaving || Boolean(ticketTypesEventId) || (isFormOpen && !editingEventId)}>Edit details</button>
+                    <button
+                      className="admin-events__secondary"
+                      type="button"
+                      onClick={() => setTicketTypesEventId((current) => current === event.id ? null : event.id)}
+                      disabled={isSaving || isFormOpen}
+                      aria-expanded={ticketTypesEventId === event.id}
+                    >
+                      {ticketTypesEventId === event.id ? 'Hide ticket types' : `Manage tickets · ${event.ticket_types.length}`}
+                    </button>
                     <button className="button-link" type="button" onClick={() => handleStatusChange(event)} disabled={pendingEventId === event.id || isSaving}>
                       {pendingEventId === event.id ? 'Saving…' : event.status === 'published' ? 'Unpublish' : 'Publish'}
                     </button>
                     {event.status === 'published' && <Link to={`/events/${event.id}`}>View public event</Link>}
                   </div>
                 </div>
+                {ticketTypesEventId === event.id && (
+                  <TicketTypesManager eventId={event.id} onTicketTypesChange={handleTicketTypesChange} />
+                )}
                 {editingEventId === event.id && (
                   <EventEditorForm
                     draft={draft}
