@@ -107,7 +107,10 @@ test('a customer can reserve tickets, complete simulated checkout, and view the 
   await page.goto(`/events/${eventId}`)
   await expect(page.getByRole('heading', { name: reservationEventTitle })).toBeVisible()
   const ticketTypeSelect = page.getByRole('combobox', { name: /^Ticket type/ })
-  await expect(ticketTypeSelect).toHaveOption({ label: 'General Admission' })
+  const generalAdmissionOption = ticketTypeSelect.locator('option').filter({
+    hasText: /^General Admission$/,
+  })
+  await expect(generalAdmissionOption).toHaveCount(1)
   await ticketTypeSelect.selectOption({ label: 'General Admission' })
   await page.getByLabel('Quantity').fill('2')
   await page.getByRole('button', { name: 'Reserve tickets' }).click()
