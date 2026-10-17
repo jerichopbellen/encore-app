@@ -18,6 +18,8 @@ async function getPrismaClient() {
         const { PrismaPg } = require('@prisma/adapter-pg')
         const adapter = new PrismaPg({
           connectionString: process.env.DATABASE_URL,
+          max: 10,
+          connectionTimeoutMillis: 5000,
         })
 
         return new PrismaClient({ adapter })

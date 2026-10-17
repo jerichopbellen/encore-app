@@ -4,7 +4,7 @@ Encore uses Node.js's built-in `node:test` runner. It works with the project's N
 
 ## Test suites
 
-- `tests/unit/` exercises request validation, reservation price serialization, the test-database safety guard, and the public error response without connecting to PostgreSQL.
+- `tests/unit/` exercises request validation, reservation price serialization, the test-database safety guard, deployment configuration, origin protection, and the public error response without connecting to PostgreSQL.
 - `tests/integration/` sends HTTP requests through the exported Express app and exercises authentication, events, reservations, inventory, checkout, and bookings against real Prisma/PostgreSQL.
 - `tests/run.cjs` discovers `.test.cjs` files and invokes Node's test runner. Integration files run sequentially; individual race tests coordinate their HTTP requests at a barrier.
 
@@ -26,18 +26,19 @@ npm run test:integration
 
 Integration tests require an explicit `TEST_DATABASE_URL`; they never fall back to `DATABASE_URL`. The database name must contain a distinct `test` segment, such as `encore_test`. The test helper loads only `server/.env.test` (if present), then points the existing lazy Prisma singleton at that URL. It does not load `server/.env` as a test configuration source.
 
-Create a separate empty PostgreSQL database named `encore_test` using your local PostgreSQL administration tool. Do not use the normal `encore` development database. The integration suite checks that all seven tables are empty before it starts; if a prior interrupted run left data behind, it fails without deleting those rows. Because this repository has no migration history, prepare the dedicated database explicitly from `server/` by pointing Prisma at the test database and applying the current Prisma model:
+Create a separate empty PostgreSQL database named `encore_test` using your local PostgreSQL administration tool. Do not use the normal `encore` development database. The integration suite checks that all seven tables are empty before it starts; if a prior interrupted run left data behind, it fails without deleting those rows. The reviewed initial migration is the canonical schema setup. Prepare a newly created dedicated test database from `server/` by pointing both Prisma URLs at that test database and applying the migration:
 
 ```powershell
 $env:TEST_DATABASE_URL = 'postgresql://<user>:<url-encoded-password>@localhost:5432/encore_test?schema=public'
 $env:DATABASE_URL = $env:TEST_DATABASE_URL
-npx prisma db push --config prisma7.config.ts
+$env:DIRECT_DATABASE_URL = $env:TEST_DATABASE_URL
+npx prisma migrate deploy --config prisma7.config.ts
 npm run test:integration
 ```
 
-Alternatively, put only the `TEST_DATABASE_URL` setting in an ignored `server/.env.test` file and run `npm run test:integration`. The test helper sets `DATABASE_URL` to the same explicit test URL before loading the application. A normal development database named `encore` is rejected by the safety guard. Never put real credentials in tracked documentation or `.env.example`.
+Alternatively, put only the `TEST_DATABASE_URL` setting in an ignored `server/.env.test` file and run `npm run test:integration` after preparing the schema with the migration command. The test helper sets `DATABASE_URL` to the same explicit test URL before loading the application. A normal development database named `encore` is rejected by the safety guard. Never put real credentials in tracked documentation or `.env.example`.
 
-`db push` is a manual, explicit setup step and is not run by any test command. Confirm the URL points at the dedicated test database before running it. Integration tests make no schema changes and never run resets, truncations, migrations, or broad cleanup.
+Migration application is a manual, explicit setup step and is not run by the integration test command. Confirm both configured URLs point at the dedicated test database before applying it. Integration tests never run resets, truncations, migrations, or broad cleanup.
 
 ## Fixtures, cleanup, and concurrency
 

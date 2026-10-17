@@ -22,10 +22,11 @@ function getJwtSecret() {
 }
 
 function getCookieOptions() {
+  const sameSite = String(process.env.COOKIE_SAME_SITE || 'lax').toLowerCase()
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite,
     path: '/',
   }
 }

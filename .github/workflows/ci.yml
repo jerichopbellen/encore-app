@@ -71,9 +71,9 @@ jobs:
         working-directory: server
         run: npx prisma generate --config prisma7.config.ts
 
-      - name: Prepare the dedicated CI test database
+      - name: Apply reviewed migrations to the dedicated CI test database
         working-directory: server
-        run: npx prisma db push --config prisma7.config.ts
+        run: npx prisma migrate deploy --config prisma7.config.ts
 
       - name: Run PostgreSQL integration tests
         working-directory: server
