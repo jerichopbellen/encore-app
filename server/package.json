@@ -7,6 +7,7 @@
     "test": "node ../tests/run.cjs unit",
     "test:integration": "node ../tests/run.cjs integration",
     "test:all": "npm test && npm run test:integration",
+    "e2e:database": "node scripts/e2e-database.cjs",
     "start": "node src/server.js",
     "db:seed": "node prisma/seed.js",
     "admin:promote": "node scripts/promote-admin.js"
