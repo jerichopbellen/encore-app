@@ -1,9 +1,10 @@
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+import { apiUrl } from './apiUrl'
 
 export async function getAdminDashboard() {
+  const url = apiUrl('/admin/dashboard')
   let response
   try {
-    response = await fetch(`${apiBaseUrl}/api/admin/dashboard`, {
+    response = await fetch(url, {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     })

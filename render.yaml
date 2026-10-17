@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: encore-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm ci && npx prisma generate --config prisma7.config.ts
+    startCommand: npm start
+    healthCheckPath: /api/ready
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 24.13.0
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: COOKIE_SAME_SITE
+        value: lax
+      - key: JWT_EXPIRES_IN
+        value: 1d

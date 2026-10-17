@@ -1,12 +1,19 @@
 require('dotenv').config()
 
-const app = require('./app')
+const { validateEnvironment } = require('./config/environment')
 const { disconnectPrisma } = require('./config/prisma')
 
-const PORT = 5000
+let configuration
+try {
+  configuration = validateEnvironment(process.env)
+} catch (error) {
+  console.error(`Encore startup configuration error: ${error.message}`)
+  process.exit(1)
+}
 
-const server = app.listen(PORT, () => {
-  console.log(`Encore API is running on http://localhost:${PORT}`)
+const app = require('./app')
+const server = app.listen(configuration.port, configuration.host, () => {
+  console.log(`Encore API is listening on ${configuration.host}:${configuration.port}`)
 })
 
 async function shutdown(signal) {

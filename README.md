@@ -175,7 +175,7 @@ npm install
 
 ### 4. Configure environment variables
 
-Create a local `server/.env` file using `server/.env.example` as a reference. The backend and Prisma 7 use `DATABASE_URL` as the single PostgreSQL connection setting. Local development expects PostgreSQL on port `5432` and a database named `encore`.
+Create a local `server/.env` file using `server/.env.example` as a reference. The API uses `DATABASE_URL` through the existing Prisma PostgreSQL adapter. `DIRECT_DATABASE_URL` is optional locally and is intended for direct Prisma CLI/migration connections. Local development expects PostgreSQL on port `5432` and a database named `encore`.
 
 The required environment variables are:
 
@@ -184,12 +184,15 @@ The required environment variables are:
 
 The following variables are optional:
 
+- `DIRECT_DATABASE_URL` — direct database connection for Prisma CLI operations; defaults to `DATABASE_URL` when unset.
 - `JWT_EXPIRES_IN` — session lifetime; defaults to `1d`.
-- `FRONTEND_ORIGIN` — accepted frontend Origin for authentication changes; defaults to `http://localhost:5173`.
-- `NODE_ENV` — controls the Secure session-cookie flag in production.
+- `FRONTEND_ORIGIN` — exact allowed browser origin for CORS and API mutations; defaults to `http://localhost:5173`.
+- `COOKIE_SAME_SITE` — cookie policy; defaults to `lax` and `none` is restricted to production HTTPS.
+- `PORT` — backend listener port; defaults to `5000` locally and is supplied by Render in production.
+- `NODE_ENV` — controls secure cookies and production startup validation.
 - `VITE_API_BASE_URL` — optional frontend API base URL.
 
-The backend listens on port `5000`, PostgreSQL uses port `5432`, and the Vite frontend typically uses port `5173`.
+The backend defaults to port `5000`, PostgreSQL uses port `5432`, and the Vite frontend typically uses port `5173`.
 
 The frontend does not need a local environment file for the default Vite proxy. When `VITE_API_BASE_URL` is unset or blank, the frontend uses relative `/api` requests, which Vite proxies to the Express backend.
 
@@ -199,7 +202,7 @@ Never commit actual credentials or secrets to version control.
 
 ### 5. Prepare the database and Prisma Client
 
-Create the `encore` database in PostgreSQL.
+Create the `encore` database in PostgreSQL. The repository includes a reviewed initial migration for new empty databases; deployment and test setup are described in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 For an existing database, Prisma can introspect the current schema and generate a client from it. From the `server/` directory, run:
 
@@ -355,6 +358,8 @@ Apply password hashing, authentication, role-based authorization, request valida
 Test successful requests, invalid inputs, missing records, inventory limits, reservation cancellation and expiration, duplicate requests, and concurrent booking attempts.
 
 See [tests/README.md](tests/README.md) for the automated test commands, dedicated PostgreSQL test database setup, and fixture cleanup behavior.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the Vercel, Render, and Neon deployment configuration, Prisma migration workflow, and staging verification checklist. No provider resources are created automatically by this repository.
 
 ## Development Workflow
 

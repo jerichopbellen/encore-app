@@ -1,9 +1,10 @@
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+import { apiUrl } from './apiUrl'
 
 async function requestBookingsApi(path = '') {
+  const url = apiUrl(`/bookings${path}`)
   let response
   try {
-    response = await fetch(`${apiBaseUrl}/api/bookings${path}`, {
+    response = await fetch(url, {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     })

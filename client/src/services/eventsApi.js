@@ -1,10 +1,11 @@
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+import { apiUrl } from './apiUrl'
 
 async function requestEventsApi(path, isListRequest = false) {
+  const url = apiUrl(`/events${path}`)
   let response
 
   try {
-    response = await fetch(`${apiBaseUrl}/api/events${path}`, {
+    response = await fetch(url, {
       headers: { Accept: 'application/json' },
     })
   } catch {

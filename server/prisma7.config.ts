@@ -3,12 +3,16 @@
 import "dotenv/config";
 import { defineConfig, env } from "prisma/config";
 
+// Prisma CLI operations use Neon’s direct connection when configured; runtime
+// Prisma Client continues to use DATABASE_URL through the PostgreSQL adapter.
+const cliDatabaseUrl = process.env.DIRECT_DATABASE_URL?.trim() || env("DATABASE_URL");
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
   datasource: {
-    url: env("DATABASE_URL"),
+    url: cliDatabaseUrl,
   },
 });
