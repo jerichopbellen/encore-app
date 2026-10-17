@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, Navigate } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
+import AuthSessionNotice from '../../components/auth/AuthSessionNotice'
 
 function getInitials(name) {
   const words = name.trim().split(/\s+/).filter(Boolean)
@@ -11,7 +12,7 @@ function getInitials(name) {
 }
 
 function ProfilePage({ embedded = false }) {
-  const { user, isLoading, updateProfile } = useAuth()
+  const { user, authStatus, isLoading, updateProfile } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const [draftName, setDraftName] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -22,6 +23,7 @@ function ProfilePage({ embedded = false }) {
     return <p className="profile-state" role="status">Checking your session…</p>
   }
 
+  if (authStatus === 'error') return <AuthSessionNotice />
   if (!user) {
     return <Navigate to="/login" replace />
   }

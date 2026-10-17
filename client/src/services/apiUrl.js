@@ -1,12 +1,11 @@
-const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || ''
+// Production must use the same-origin Vercel proxy. A configured API origin is
+// honored only in local development, where Vite's /api proxy remains available.
+const rawApiBaseUrl = import.meta.env.PROD ? '' : import.meta.env.VITE_API_BASE_URL?.trim() || ''
 
 function getApiBaseUrl() {
-  if (!rawApiBaseUrl) {
-    if (import.meta.env.PROD) {
-      throw new Error('VITE_API_BASE_URL must be configured for production API requests.')
-    }
-    return ''
-  }
+  // An empty base uses the same-origin /api path. Vite proxies it locally,
+  // and Vercel proxies it to Render in production.
+  if (!rawApiBaseUrl) return ''
 
   let parsed
   try {

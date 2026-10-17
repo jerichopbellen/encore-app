@@ -1,10 +1,12 @@
 import { Link, Navigate, NavLink, Outlet } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
+import AuthSessionNotice from '../../components/auth/AuthSessionNotice'
 
 function AccountLayout() {
-  const { user, isLoading } = useAuth()
+  const { user, authStatus, isLoading } = useAuth()
 
   if (isLoading) return <p className="account-state" role="status">Checking your account…</p>
+  if (authStatus === 'error') return <AuthSessionNotice />
   if (!user) return <Navigate to="/login" replace />
 
   return (

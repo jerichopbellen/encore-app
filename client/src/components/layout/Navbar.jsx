@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
+import AuthSessionNotice from '../auth/AuthSessionNotice'
 
 function Navbar({ onMobileMenuLayoutChange }) {
-  const { user, isLoading, signOut } = useAuth()
+  const { user, authStatus, isLoading, signOut } = useAuth()
   const location = useLocation()
   const [logoutError, setLogoutError] = useState('')
   const [mobileMenuPath, setMobileMenuPath] = useState(null)
@@ -159,7 +160,7 @@ function Navbar({ onMobileMenuLayoutChange }) {
           aria-label="Main navigation"
         >
           <NavLink to="/" end onClick={closeNavigation}>Discover</NavLink>
-          {isLoading ? <span className="navbar__session">Checking session…</span> : user ? (
+          {isLoading ? <span className="navbar__session">Checking session…</span> : authStatus === 'error' ? <AuthSessionNotice compact /> : user ? (
             <>
               <div className="navbar__dropdown">
                 {dropdownTrigger('account', 'My Account')}

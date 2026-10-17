@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
+import AuthSessionNotice from '../../components/auth/AuthSessionNotice'
 import { getBookings } from '../../services/bookingsApi'
 import { formatPrice } from '../../utils/eventDisplay'
 
 function BookingsPage({ embedded = false }) {
-  const { user, isLoading: isAuthLoading } = useAuth()
+  const { user, authStatus, isLoading: isAuthLoading } = useAuth()
   const [state, setState] = useState({ status: 'loading' })
   const [retry, setRetry] = useState(0)
 
@@ -19,6 +20,7 @@ function BookingsPage({ embedded = false }) {
   }, [isAuthLoading, retry, user])
 
   if (isAuthLoading) return <p className="event-page-state" role="status">Checking your account…</p>
+  if (authStatus === 'error') return <AuthSessionNotice />
   if (!user) return <Navigate to="/login" replace />
 
   return (

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
+import AuthSessionNotice from '../../components/auth/AuthSessionNotice'
 import { getBooking } from '../../services/bookingsApi'
 import { formatPrice } from '../../utils/eventDisplay'
 
 function BookingConfirmationPage() {
   const { bookingId } = useParams()
-  const { user, isLoading: isAuthLoading } = useAuth()
+  const { user, authStatus, isLoading: isAuthLoading } = useAuth()
   const [state, setState] = useState({ status: 'loading' })
 
   useEffect(() => {
@@ -19,6 +20,7 @@ function BookingConfirmationPage() {
   }, [bookingId, isAuthLoading, user])
 
   if (isAuthLoading) return <p className="event-page-state" role="status">Checking your account…</p>
+  if (authStatus === 'error') return <AuthSessionNotice />
   if (!user) return <Navigate to="/login" replace />
   if (state.status === 'loading') return <p className="event-page-state" role="status">Loading booking…</p>
   if (state.status === 'error') return <section className="booking-state" role="alert"><h1>We couldn’t find that booking</h1><p>{state.message}</p><Link className="button-link" to="/account/bookings">My bookings</Link></section>

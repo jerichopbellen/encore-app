@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
+import AuthSessionNotice from '../../components/auth/AuthSessionNotice'
 import { getAdminDashboard } from '../../services/adminDashboardApi'
 import { formatEventDate } from '../../utils/eventDisplay'
 
 function AdminDashboardPage() {
-  const { user, isLoading: isAuthLoading } = useAuth()
+  const { user, authStatus, isLoading: isAuthLoading } = useAuth()
   const [dashboard, setDashboard] = useState(null)
   const [loadState, setLoadState] = useState('loading')
   const [retryCount, setRetryCount] = useState(0)
@@ -27,6 +28,7 @@ function AdminDashboardPage() {
   }, [isAuthLoading, retryCount, user])
 
   if (isAuthLoading) return <p className="admin-events-state" role="status">Checking your session…</p>
+  if (authStatus === 'error') return <AuthSessionNotice />
   if (!user) return <Navigate to="/login" replace />
   if (user.role !== 'admin') {
     return (

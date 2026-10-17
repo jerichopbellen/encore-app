@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
+import AuthSessionNotice from '../../components/auth/AuthSessionNotice'
 import { checkoutReservation, getReservation } from '../../services/reservationsApi'
 import { formatPrice } from '../../utils/eventDisplay'
 
@@ -39,7 +40,7 @@ function clearStoredCheckoutKey(reservationId) {
 function CheckoutPage() {
   const { reservationId } = useParams()
   const navigate = useNavigate()
-  const { user, isLoading: isAuthLoading } = useAuth()
+  const { user, authStatus, isLoading: isAuthLoading } = useAuth()
   const [reservation, setReservation] = useState(null)
   const [loadState, setLoadState] = useState('loading')
   const [error, setError] = useState('')
@@ -70,6 +71,7 @@ function CheckoutPage() {
   }, [isAuthLoading, reservationId, user])
 
   if (isAuthLoading) return <p className="event-page-state" role="status">Checking your account…</p>
+  if (authStatus === 'error') return <AuthSessionNotice />
   if (!user) return <Navigate to="/login" replace />
 
   async function handleCheckout() {
