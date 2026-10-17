@@ -56,6 +56,12 @@ h1 { color: var(--warm-white); }
   color: var(--muted-strong); line-height: 1.65;
 }
 .event-page-state { margin: 20px 0; padding: 20px 0; border-block: 1px solid var(--line); }
+.auth-session-notice { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; border: 1px solid var(--line-strong); background: var(--warm-white); color: var(--ink); line-height: 1.5; }
+.auth-session-notice__retry { flex: 0 0 auto; padding: 7px 11px; border: 1px solid currentColor; background: transparent; color: var(--burnt-orange); font-weight: 700; cursor: pointer; }
+.auth-session-notice__retry:hover { background: var(--burnt-orange); color: var(--warm-white); }
+.auth-session-notice__retry:focus-visible { outline-color: var(--burnt-orange); }
+.auth-session-notice--compact { gap: 8px; padding: 0; border: 0; background: transparent; color: var(--warm-white); font-size: .78rem; }
+.auth-session-notice--compact .auth-session-notice__retry { padding: 5px 8px; }
 
 /* Global navigation and footer. Dropdown surfaces remain opaque for contrast. */
 .navbar { position: sticky; z-index: 50; top: 0; min-height: var(--navbar-height); color: var(--warm-white); transition: background-color .2s ease, box-shadow .2s ease, backdrop-filter .2s ease; }

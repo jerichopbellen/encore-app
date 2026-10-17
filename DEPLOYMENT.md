@@ -7,9 +7,9 @@ This guide prepares the existing monorepo for a manually configured deployment. 
 - **Vercel** builds the static React/Vite frontend from `client/`.
 - **Render** runs the CommonJS Express API from `server/` as a Node web service.
 - **Neon** hosts PostgreSQL. The Express API uses the Neon pooled connection through the existing Prisma 7 PostgreSQL adapter. Prisma CLI migration commands use the direct connection when `DIRECT_DATABASE_URL` is configured.
-- Browser calls use the Vite development proxy locally and `VITE_API_BASE_URL` in a production build. Cookie-authenticated requests include credentials. The backend responds to only the exact `FRONTEND_ORIGIN`, and a separate API guard validates Origin on unsafe requests.
+- Browser calls use the Vite development proxy locally and Vercel's same-origin `/api` rewrite in production. Cookie-authenticated requests include credentials, so the browser talks to its own Vercel origin while Vercel forwards API traffic to Render. The backend responds to only the exact `FRONTEND_ORIGIN`, and a separate API guard validates Origin on unsafe requests.
 
-The recommended production domain setup is a frontend and API under the same registrable domain, for example `encore.example.com` and `api.encore.example.com`. They are separate origins, so credentialed CORS is required, but they are same-site for cookie purposes; keep `COOKIE_SAME_SITE=lax` and do not set a cookie `Domain`. The default Vercel and Render provider hostnames are different sites. Using those hostnames directly requires `COOKIE_SAME_SITE=none` and HTTPS. Unsafe API methods reject mismatched `Origin` values, which provides an independent CSRF check for browser mutations, but browser third-party-cookie restrictions can still prevent sessions from working. Do not claim hosted authentication works until it is tested in the target browsers. A Vercel `/api` reverse proxy to Render is another same-origin option, but it requires intentionally changing the client API-base configuration.
+The production frontend and API provider hostnames (`*.vercel.app` and `*.onrender.com`) are different sites. Direct browser requests to Render therefore depend on cross-site cookies, which browsers may block even when `SameSite=None; Secure` is configured. Encore instead sends browser requests to the Vercel origin and uses an external rewrite as a reverse proxy to Render. This makes the session cookie host-only to the frontend site and first-party in the browser. Keep `COOKIE_SAME_SITE=lax`, `Secure`, and `HttpOnly`; do not set a cookie `Domain`. A custom same-site domain or another deliberately designed proxy is also possible, but do not rely on cross-site provider-host cookies for production authentication.
 
 ## Local development
 
@@ -29,9 +29,9 @@ In the Vercel project settings, configure:
 - **Framework preset:** Vite (or automatic detection)
 - **Build command:** `npm run build`
 - **Output directory:** `dist`
-- **Environment variable:** `VITE_API_BASE_URL=https://<your-render-service>.onrender.com` (replace with the actual Render API origin; no trailing slash is required)
+- Production builds always use relative `/api/...` requests, even if an old `VITE_API_BASE_URL` setting remains configured. Remove that Vercel variable to avoid confusion. In local development it remains an optional override; leave it blank to use Vite's local proxy.
 
-The `client/vercel.json` SPA rewrite returns `index.html` for client routes such as `/events/:eventId`, `/account/bookings`, and `/bookings/:bookingId`, while excluding `/api` paths so unknown API requests are not served the React app. Vercel checks the built file system before applying rewrites, so existing static assets are served normally. Configure the production API URL for the Production environment and a suitable API origin for Preview deployments. `VITE_` values are public and become part of the client build; never put credentials or server secrets there.
+The first rewrite in `client/vercel.json` forwards `/api/:path*` to the Render API while leaving the browser URL on the Vercel site; the later SPA rewrite returns `index.html` for client routes and excludes `/api` paths. Vercel documents external rewrites as a reverse-proxy pattern ([Vercel rewrites documentation](https://vercel.com/docs/routing/rewrites)). Production code ignores `VITE_API_BASE_URL` to ensure it cannot bypass the same-origin proxy and reintroduce cross-site cookie behavior. `VITE_` values are public and must never contain credentials or server secrets.
 
 ## Render backend
 
@@ -46,11 +46,11 @@ Set these server-only variables in the Render dashboard:
 | `DIRECT_DATABASE_URL` | Yes before migration operations | Neon direct URL for Prisma CLI and schema migration commands, targeting the same database. |
 | `JWT_SECRET` | Yes | Random private signing secret of at least 32 bytes; never expose it to Vercel. |
 | `FRONTEND_ORIGIN` | Yes | Exact HTTPS origin of the deployed frontend; no path or trailing slash. |
-| `COOKIE_SAME_SITE` | Optional | Defaults to `lax`; use `none` only for cross-site HTTPS provider hostnames, with the Origin guard enabled and after browser verification. |
+| `COOKIE_SAME_SITE` | Optional | Keep `lax` for the Vercel `/api` proxy. Do not use `none` to compensate for direct cross-site provider-host requests. |
 | `JWT_EXPIRES_IN` | Optional | Defaults to `1d`. |
 | `PORT` | No | Supplied by Render. Do not hardcode a dashboard value. |
 
-`render.yaml` marks secrets as dashboard-managed and contains no credentials. It does not create a Neon database or run migrations during application startup. Keep Render's independent auto-deploy disabled; the GitHub Actions staging release coordinates migrations before triggering the backend deployment.
+`render.yaml` marks secrets as dashboard-managed and contains no credentials. It does not create a Neon database or run migrations during application startup. Set Render's `FRONTEND_ORIGIN` to the exact browser-visible Vercel origin (currently `https://encore-app-theta.vercel.app`) so CORS and the unsafe-request Origin guard accept proxied requests. Keep Render's independent auto-deploy disabled; the GitHub Actions staging release coordinates migrations before triggering the backend deployment.
 
 ## Neon connections and database releases
 
@@ -116,11 +116,13 @@ Do not mark these complete until they have been performed against the deployed s
 - [ ] Vercel static assets still load under the SPA rewrite.
 
 ### Authentication and origins
+- [ ] Vercel Production build uses the `/api` proxy (production code forces same-origin); remove any obsolete `VITE_API_BASE_URL` setting. Preview builds also use same-origin proxying, but auth is allowed only if Render's exact `FRONTEND_ORIGIN` is configured for that preview origin.
+- [ ] Render `FRONTEND_ORIGIN` exactly matches the browser-visible Vercel origin used for the test.
 - [ ] Registration, login, refresh-based session restoration, logout, and protected routes work in supported browsers.
 - [ ] Admin routes deny customers; backend authorization is still enforced independently of UI routing.
 - [ ] Allowed origin requests receive credentialed CORS and valid preflights; disallowed origins do not.
 - [ ] Cookie `HttpOnly`, `Secure`, and `SameSite` attributes match the chosen custom-domain or proxy topology.
-- [ ] Cross-site provider hostnames are not assumed to work until cookie behavior is verified in current browsers.
+- [ ] Browser requests use the Vercel `/api` proxy; direct `onrender.com` calls are not assumed to work with first-party cookie settings.
 
 ### Booking and operations
 - [ ] Catalogue, details, search, sorting, availability, pagination, and booking pages load through the deployed API.

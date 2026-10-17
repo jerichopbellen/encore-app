@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
+import AuthSessionNotice from '../../components/auth/AuthSessionNotice'
 import { getReservations } from '../../services/reservationsApi'
 import { formatPrice } from '../../utils/eventDisplay'
 
@@ -28,7 +29,7 @@ function getStatusClass(status) {
 }
 
 function ReservationsPage({ embedded = false }) {
-  const { user, isLoading: isAuthLoading } = useAuth()
+  const { user, authStatus, isLoading: isAuthLoading } = useAuth()
   const [loadState, setLoadState] = useState({ status: 'loading' })
   const [retryCount, setRetryCount] = useState(0)
 
@@ -50,6 +51,7 @@ function ReservationsPage({ embedded = false }) {
   if (isAuthLoading) {
     return <p className="event-page-state" role="status">Checking your account…</p>
   }
+  if (authStatus === 'error') return <AuthSessionNotice />
   if (!user) return <Navigate to="/login" replace />
 
   return (

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
+import AuthSessionNotice from '../auth/AuthSessionNotice'
 import { createReservation } from '../../services/reservationsApi'
 import { formatPrice } from '../../utils/eventDisplay'
 
 function EventReservationPanel({ event }) {
-  const { user, isLoading } = useAuth()
+  const { user, authStatus, isLoading } = useAuth()
   const [ticketTypeId, setTicketTypeId] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -67,6 +68,8 @@ function EventReservationPanel({ event }) {
       <div className="reservation-panel__content">
         {isLoading ? (
           <p className="reservation-panel__message" role="status">Checking your account…</p>
+        ) : authStatus === 'error' ? (
+          <AuthSessionNotice compact />
         ) : !user ? (
           <div className="reservation-panel__signed-out">
             <p>Sign in to hold tickets for this event.</p>
