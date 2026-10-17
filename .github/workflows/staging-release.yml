@@ -1,0 +1,153 @@
+name: Encore Staging Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: encore-staging-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Reuse Encore CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  migrate-and-deploy:
+    name: Migrate Neon staging, then deploy Render
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the validated commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js 24 LTS
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Check required secrets and staging targets
+        shell: bash
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          NEON_STAGING_HOST: ${{ vars.NEON_STAGING_HOST }}
+        run: |
+          node <<'NODE'
+          function fail(message) {
+            console.error(`::error::${message}`)
+            process.exit(1)
+          }
+
+          const databaseUrl = process.env.DIRECT_DATABASE_URL
+          const deployHookUrl = process.env.RENDER_DEPLOY_HOOK_URL
+          const stagingHost = process.env.NEON_STAGING_HOST
+
+          if (!databaseUrl) fail('Required secret DIRECT_DATABASE_URL is missing.')
+          if (!deployHookUrl) fail('Required secret RENDER_DEPLOY_HOOK_URL is missing.')
+          if (!stagingHost) fail('Required repository variable NEON_STAGING_HOST is missing.')
+
+          if (stagingHost !== stagingHost.trim()
+            || !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+neon\.tech$/.test(stagingHost)) {
+            fail('NEON_STAGING_HOST must contain only the exact staging Neon hostname.')
+          }
+
+          let database
+          try {
+            database = new URL(databaseUrl)
+          } catch {
+            fail('DIRECT_DATABASE_URL is not a valid URL.')
+          }
+
+          let databaseName
+          try {
+            databaseName = decodeURIComponent(database.pathname.slice(1))
+          } catch {
+            fail('DIRECT_DATABASE_URL has an invalid database name.')
+          }
+
+          if (!['postgres:', 'postgresql:'].includes(database.protocol)
+            || !database.hostname.endsWith('.neon.tech')
+            || database.hostname.includes('-pooler.')
+            || database.hostname !== stagingHost
+            || databaseName !== 'neondb') {
+            fail('DIRECT_DATABASE_URL must target the configured direct Neon staging hostname and database neondb.')
+          }
+
+          let deployHook
+          try {
+            deployHook = new URL(deployHookUrl)
+          } catch {
+            fail('RENDER_DEPLOY_HOOK_URL is not a valid URL.')
+          }
+
+          if (deployHook.protocol !== 'https:'
+            || deployHook.hostname !== 'api.render.com'
+            || !deployHook.pathname.startsWith('/deploy/')) {
+            fail('RENDER_DEPLOY_HOOK_URL must be an HTTPS Render deploy hook URL.')
+          }
+          NODE
+
+      - name: Apply pending staging migrations
+        working-directory: server
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+        run: npx prisma migrate deploy --config prisma7.config.ts
+
+      - name: Trigger Render deployment
+        shell: bash
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          node <<'NODE'
+          async function triggerDeploy() {
+            try {
+              const commitSha = process.env.GITHUB_SHA
+              if (!/^[0-9a-f]{40}$/i.test(commitSha ?? '')) {
+                console.error('::error::The validated commit SHA is missing or invalid.')
+                process.exitCode = 1
+                return
+              }
+
+              const deployUrl = new URL(process.env.RENDER_DEPLOY_HOOK_URL)
+              deployUrl.searchParams.set('ref', commitSha)
+
+              const response = await fetch(deployUrl, {
+                method: 'POST',
+                redirect: 'manual',
+              })
+
+              await response.body?.cancel()
+
+              if (!response.ok) {
+                console.error(`::error::Render deploy hook returned HTTP ${response.status}.`)
+                process.exitCode = 1
+                return
+              }
+
+              console.log(`Render deploy hook accepted the request (HTTP ${response.status}).`)
+            } catch {
+              console.error('::error::Render deploy hook request failed; URL and response body were withheld.')
+              process.exitCode = 1
+            }
+          }
+
+          triggerDeploy()
+          NODE
