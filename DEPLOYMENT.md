@@ -50,15 +50,15 @@ Set these server-only variables in the Render dashboard:
 | `JWT_EXPIRES_IN` | Optional | Defaults to `1d`. |
 | `PORT` | No | Supplied by Render. Do not hardcode a dashboard value. |
 
-`render.yaml` marks secrets as dashboard-managed and contains no credentials. It does not create a Neon database or run migrations during application startup. Keep automatic deploys disabled until the database migration release process is reviewed.
+`render.yaml` marks secrets as dashboard-managed and contains no credentials. It does not create a Neon database or run migrations during application startup. Keep Render's independent auto-deploy disabled; the GitHub Actions staging release coordinates migrations before triggering the backend deployment.
 
 ## Neon connections and database releases
 
 Create a Neon PostgreSQL project and database in the Neon console. Copy the **pooled** connection URL into Render's `DATABASE_URL` and the **direct** connection URL into `DIRECT_DATABASE_URL`. Both must point to the same intended Neon database and require TLS. The application keeps its current lazy Prisma singleton and uses the pooled URL; CLI commands use the direct URL when present. The pg adapter's pool is capped at 10 connections per Render process with a 5-second connection timeout. Size the Neon connection budget for the number of Render instances.
 
-The repository now contains an initial Prisma migration at `server/prisma/migrations/20261017000000_initial_schema/migration.sql`. It creates the seven tables, foreign keys, unique indexes, and explicit SQL check constraints that are not represented in the Prisma model. The migration was applied only to the separately named local `encore_migration_test` database during this milestone; it was not applied to the existing development database or any hosted database.
+The repository contains an initial Prisma migration at `server/prisma/migrations/20261017000000_initial_schema/migration.sql`. It creates the seven tables, foreign keys, unique indexes, and explicit SQL check constraints that are not represented in the Prisma model. The initial migration has been applied to the intended Neon staging database. It was also applied to the separately named local `encore_migration_test` database during the original migration setup; it was not applied to the existing development database.
 
-For a **new, empty** staging or production database, first take the required backup/recovery precautions, then from `server/` run:
+For staging, use the automated release workflow described below. For a **new, empty database outside that automated staging flow** (for example, a separately provisioned production database), first take the required backup/recovery precautions, then from `server/` run:
 
 ```bash
 npx prisma migrate deploy --config prisma7.config.ts
@@ -69,6 +69,29 @@ With `DIRECT_DATABASE_URL` set, Prisma CLI uses the direct Neon URL. Run this as
 The existing development database has no migration history. This initial migration has **not** been proven identical to that database. Before adopting migrations for an existing database, compare its complete schema and check-constraint definitions with this migration using a safe read-only schema inspection. Only after the comparison and a backup should an operator decide whether to baseline it with `prisma migrate resolve --applied 20261017000000_initial_schema --config prisma7.config.ts`. Do not run that command against an unknown or mismatched database, and do not treat it as a schema change or compatibility proof.
 
 For future releases, review generated SQL and custom SQL constraints, apply the migration in staging, verify application behavior and inventory invariants, back up production, and then run `migrate deploy`. Prisma migrations do not supply an automatic rollback. For a failed release, stop rollout, inspect the migration and database state, then use a reviewed forward fix or restore from a verified backup/PITR plan. Do not blindly reverse SQL or reset a database.
+
+## Automated Neon staging migration and Render release
+
+The `Encore Staging Release` GitHub Actions workflow runs on pushes to `main`. It calls the existing CI workflow first, then checks the required secrets and staging hostname variable, confirming the migration URL points to the configured direct Neon endpoint with database name `neondb`. It installs backend dependencies, runs `npx prisma migrate deploy --config prisma7.config.ts`, and only after that command succeeds sends a POST request to the Render deploy hook. The hook's `ref` query parameter is set to the exact `github.sha` checked out, validated, and migrated by that workflow run; existing hook query parameters are preserved and any prior `ref` is replaced. The CI workflow still runs directly for pull requests; on `main`, it is reused by the release workflow rather than run twice. A concurrency group serializes staging releases, and Render's independent auto-deploy remains disabled.
+
+Configure these exact **GitHub repository Actions secrets and variable** before expecting automated releases:
+
+| Secret | Value and where to obtain it |
+| --- | --- |
+| `DIRECT_DATABASE_URL` | The **direct** connection URL for the intended Neon staging database (`neondb`), from the Neon dashboard's connection details. Do not use a pooled URL. |
+| `RENDER_DEPLOY_HOOK_URL` | The deploy hook URL created for the Render `encore-api` web service, from that service's settings. |
+
+| Variable | Value and where to obtain it |
+| --- | --- |
+| `NEON_STAGING_HOST` | The exact hostname for the intended staging project's direct `neondb` endpoint. In the Neon dashboard, open the staging project and use its connection details to view the direct connection URL; copy only the hostname portion (the value after `@` and before any `:port` or `/database`). Configure this non-secret under GitHub repository **Settings → Secrets and variables → Actions → Variables**. Do not include a scheme, credentials, port, or path. |
+
+The workflow fails closed if any of these three values is missing or malformed. It checks that `DIRECT_DATABASE_URL` is PostgreSQL, uses a direct `*.neon.tech` endpoint rather than a pooler, names `neondb`, and has a hostname exactly matching `NEON_STAGING_HOST`. Do not put secrets in the repository, workflow logs, or client/Vercel environment. **Never configure a production database URL as the staging secret or set the variable to a production hostname.**
+
+Monitor the `Encore Staging Release` run in the repository's **Actions** tab. The migration job fails before calling Render if a required secret or variable is missing, the target does not pass its staging checks, dependency installation fails, or Prisma reports a migration error. A failed migration means no Render deployment hook is called. Inspect the migration error and staging migration status before retrying; do not substitute `db push`, `migrate dev`, or manual DDL. A successful migration followed by a failed deploy-hook request requires checking Render's deployment activity before deciding whether to retry.
+
+The migration is applied **before** the new backend version is deployed. Therefore, schema changes must be backward-compatible with the currently running backend during that interval. Use expand-and-contract changes for schema changes that would otherwise break the old version.
+
+After Render finishes deploying, verify `https://encore-api-7xew.onrender.com/api/ready` returns HTTP 200 and then verify `https://encore-api-7xew.onrender.com/api/events` returns the expected successful event-catalogue response. Also check the Render deployment logs for startup errors. This workflow does not configure Vercel or independently prove browser behavior.
 
 The seed script is for local demo/development data only. It is not run by Render startup, Vercel, or the migration workflow. Never seed a production database.
 
