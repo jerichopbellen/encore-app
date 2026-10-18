@@ -143,13 +143,46 @@ async function checkoutReservation(userId, reservationId, idempotencyKey) {
         (sum, item) => sum + priceToCents(item.unit_price) * BigInt(item.quantity),
         0n,
       )
-      const booking = await tx.bookings.create({
-        data: {
-          reservation_id: reservationId,
-          user_id: userId,
-          status: 'confirmed',
-          total_amount: centsToPrice(totalCents),
-        },
+
+      // Hold the event rows through checkout so an administrator changing an
+      // event's start time cannot race the final booking write. A lock wait
+      // returns the committed event version before the write-time cutoff.
+      await tx.$queryRaw`/* encore-checkout-event-lock */
+        SELECT event.id
+        FROM events AS event
+        WHERE EXISTS (
+          SELECT 1
+          FROM reservation_items AS item
+          JOIN ticket_types AS ticket ON ticket.id = item.ticket_type_id
+          WHERE item.reservation_id = ${reservationId}::uuid
+            AND ticket.event_id = event.id
+        )
+        ORDER BY event.id
+        FOR SHARE OF event`
+
+      // This conditional insert is the authoritative cutoff check. It uses
+      // PostgreSQL wall-clock time at the write, not the earlier Node check.
+      const insertedBookings = await tx.$queryRaw`/* encore-checkout-cutoff-write */
+        INSERT INTO bookings (reservation_id, user_id, status, total_amount)
+        SELECT reservation.id, reservation.user_id, 'confirmed', ${centsToPrice(totalCents)}::numeric
+        FROM reservations AS reservation
+        WHERE reservation.id = ${reservationId}::uuid
+          AND reservation.user_id = ${userId}::uuid
+          AND NOT EXISTS (
+            SELECT 1
+            FROM reservation_items AS item
+            JOIN ticket_types AS ticket ON ticket.id = item.ticket_type_id
+            JOIN events AS event ON event.id = ticket.event_id
+            WHERE item.reservation_id = reservation.id
+              AND event.starts_at <= clock_timestamp()
+          )
+        RETURNING id`
+      if (insertedBookings.length === 0) {
+        throw new AppError('This event has already started and is no longer available for checkout.', 409)
+      }
+
+      const booking = await tx.bookings.findUnique({
+        where: { reservation_id: reservationId },
         include: bookingInclude,
       })
 

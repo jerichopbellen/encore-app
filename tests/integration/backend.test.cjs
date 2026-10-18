@@ -1,6 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const { randomBytes, randomUUID } = require('node:crypto')
+const { Client } = require('../../server/node_modules/pg')
 const { configureTestDatabase } = require('../helpers/testDatabase.cjs')
 
 // Configure Prisma before requiring the app: the ordinary server/.env is never
@@ -19,6 +20,54 @@ function makeBarrier(parties) {
     await gate
     return operation()
   }
+}
+
+async function waitForMarkedLockWaitBeforeCutoff(client, queryMarker, eventId) {
+  const deadline = Date.now() + 10_000
+  let blockedCount = 0
+  while (Date.now() < deadline) {
+    // The lock holder is inside a transaction, where PostgreSQL otherwise keeps
+    // reusing the pg_stat_activity rows it first read. Clear them so each poll
+    // sees the application's current statement text.
+    await client.query('SELECT pg_stat_clear_snapshot()')
+    // One statement observes the blocked application query and PostgreSQL's
+    // clock together, so the test knows the request was waiting before cutoff.
+    const { rows: [observation] } = await client.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE strpos(activity.query, $1) > 0)::int AS marked_count,
+        COUNT(*)::int AS blocked_count,
+        (SELECT clock_timestamp() < event.starts_at FROM events AS event WHERE event.id = $2::uuid) AS before_cutoff
+      FROM pg_stat_activity AS activity
+      WHERE activity.datname = current_database()
+        AND activity.backend_type = 'client backend'
+        AND activity.pid <> pg_backend_pid()
+        AND pg_backend_pid() = ANY(pg_blocking_pids(activity.pid))
+    `, [queryMarker, eventId])
+    if (observation.marked_count > 1) {
+      throw new Error(`Expected one backend blocked at ${queryMarker}; found ${observation.marked_count}.`)
+    }
+    if (observation.marked_count === 1) return { beforeCutoff: observation.before_cutoff }
+    blockedCount = observation.blocked_count
+    // Poll for the explicit PostgreSQL lock-wait state; this is synchronization,
+    // not a delay used to guess when the application reached a code path.
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(blockedCount > 0
+    ? `Timed out: ${blockedCount} backend(s) were blocked by the lock holder, but none at ${queryMarker}.`
+    : `Timed out waiting for a backend blocked at ${queryMarker}.`)
+}
+
+async function waitUntilDatabaseTime(client, eventId) {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    const result = await client.query(
+      'SELECT clock_timestamp() >= starts_at AS reached FROM events WHERE id = $1::uuid',
+      [eventId],
+    )
+    if (result.rows[0]?.reached) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error('Timed out waiting for PostgreSQL wall-clock cutoff.')
 }
 
 function cookieFromLogin(response) {
@@ -263,7 +312,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       fixture.account.cookie = cookieFromLogin(relogin.response)
     })
 
-    await t.test('admin routes enforce current database role for every endpoint', async () => {
+    await t.test('admin routes enforce current database role for every endpoint', async (t) => {
       const endpoints = [
         { method: 'GET', path: '/api/admin/dashboard' },
         { method: 'GET', path: '/api/admin/events' },
@@ -313,6 +362,23 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       })
       assert.equal(emptyDashboard.payload.data.confirmed_booking_count, 0)
       assert.deepEqual(emptyDashboard.payload.data.upcoming_events, [])
+
+      await t.test('dashboard excludes an event exactly at its upcoming cutoff', async (t) => {
+        const cutoff = new Date(Date.now() + 60_000)
+        const boundaryEvent = await createEvent('Dashboard Boundary Fixture', 'published', cutoff)
+        const futureEvent = await createEvent('Dashboard Future Fixture', 'published', new Date(cutoff.getTime() + 1))
+
+        t.mock.timers.enable({ apis: ['Date'], now: cutoff })
+        try {
+          const result = await request('/api/admin/dashboard', { cookie: fixture.account.cookie })
+          assert.equal(result.response.status, 200)
+          assert.deepEqual(result.payload.data.upcoming_events.map(({ id }) => id), [futureEvent.id])
+          assert.equal(result.payload.data.upcoming_events.some(({ id }) => id === boundaryEvent.id), false)
+        } finally {
+          t.mock.timers.reset()
+          await prisma.events.deleteMany({ where: { id: { in: [boundaryEvent.id, futureEvent.id] } } })
+        }
+      })
 
       await prisma.users.update({ where: { id: fixture.account.id }, data: { role: 'customer' } })
       const revoked = await request('/api/admin/events', {
@@ -566,6 +632,8 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         })
         assert.equal(unrelatedLegacyEdit.response.status, 200)
         assert.equal(unrelatedLegacyEdit.payload.data.starts_at, legacyPastStart.toISOString())
+        const adminEventsWithHistory = await request('/api/admin/events', { cookie: fixture.account.cookie })
+        assert.ok(adminEventsWithHistory.payload.data.some((item) => item.id === managedEventId))
         const explicitPastLegacyEdit = await request(`/api/admin/events/${managedEventId}`, {
           method: 'PATCH', cookie: fixture.account.cookie, body: { starts_at: legacyPastStart.toISOString() },
         })
@@ -720,6 +788,90 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       assert.equal(secondTiePage.payload.data.events[0].id, sortedIds[1])
     })
 
+    await t.test('Discover excludes past and boundary-time events while historical details remain public', async (t) => {
+      const cutoff = new Date(Date.now() + 60_000)
+      const pastEvent = await createEvent('Cutoff Past Fixture', 'published', new Date(cutoff.getTime() - 1))
+      const boundaryEvent = await createEvent('Cutoff Boundary Fixture', 'published', cutoff)
+      const upcomingEvent = await createEvent('Cutoff Upcoming Fixture', 'published', new Date(cutoff.getTime() + 1))
+      const pastTicket = await createTicketType(pastEvent.id)
+      const boundaryTicket = await createTicketType(boundaryEvent.id)
+
+      t.mock.timers.enable({ apis: ['Date'], now: cutoff })
+      try {
+        const catalogue = await request('/api/events?q=Cutoff%20&page_size=1')
+        assert.equal(catalogue.response.status, 200)
+        assert.equal(catalogue.payload.data.pagination.total_events, 1)
+        assert.equal(catalogue.payload.data.pagination.total_pages, 1)
+        assert.deepEqual(catalogue.payload.data.events.map(({ id }) => id), [upcomingEvent.id])
+
+        const nextPage = await request('/api/events?q=Cutoff%20&page=2&page_size=1')
+        assert.deepEqual(nextPage.payload.data.events, [])
+        assert.equal(nextPage.payload.data.pagination.total_events, 1)
+
+        for (const historicalEvent of [pastEvent, boundaryEvent]) {
+          const details = await request(`/api/events/${historicalEvent.id}`)
+          assert.equal(details.response.status, 200)
+          assert.equal(details.payload.data.id, historicalEvent.id)
+          assert.equal(details.payload.data.ticket_types.length, 1)
+        }
+
+      } finally {
+        t.mock.timers.reset()
+      }
+
+      const [databaseCutoff] = await prisma.$queryRaw`SELECT clock_timestamp() AS cutoff`
+      await prisma.events.updateMany({
+        where: { id: { in: [pastEvent.id, boundaryEvent.id] } },
+        data: { starts_at: databaseCutoff.cutoff },
+      })
+      const pastInventory = (await prisma.ticket_types.findUnique({ where: { id: pastTicket.id } })).available_quantity
+      const pastReservation = await createReservation(fixture.account, pastEvent.id, pastTicket.id)
+      assert.equal(pastReservation.response.status, 409)
+      assert.match(pastReservation.payload.message, /already started/)
+      assert.equal((await prisma.ticket_types.findUnique({ where: { id: pastTicket.id } })).available_quantity, pastInventory)
+
+      const boundaryInventory = (await prisma.ticket_types.findUnique({ where: { id: boundaryTicket.id } })).available_quantity
+      const boundaryReservation = await createReservation(fixture.account, boundaryEvent.id, boundaryTicket.id)
+      assert.equal(boundaryReservation.response.status, 409)
+      assert.match(boundaryReservation.payload.message, /already started/)
+      assert.equal((await prisma.ticket_types.findUnique({ where: { id: boundaryTicket.id } })).available_quantity, boundaryInventory)
+    })
+
+    await t.test('reservation rejects an event that becomes past while the inventory row is locked', async () => {
+      const [databaseStart] = await prisma.$queryRaw`SELECT clock_timestamp() + INTERVAL '5 seconds' AS starts_at`
+      const startsAt = databaseStart.starts_at
+      const event = await createEvent('Reservation Lock Cutoff Fixture', 'published', startsAt)
+      const ticket = await createTicketType(event.id)
+      const reservationCountBefore = await prisma.reservations.count({ where: { user_id: fixture.account.id } })
+      const lockClient = new Client({ connectionString: process.env.TEST_DATABASE_URL })
+      let transactionOpen = false
+      let reservationPromise
+
+      try {
+        await lockClient.connect()
+        await lockClient.query('BEGIN')
+        transactionOpen = true
+        await lockClient.query('SELECT id FROM ticket_types WHERE id = $1::uuid FOR UPDATE', [ticket.id])
+
+        reservationPromise = createReservation(fixture.account, event.id, ticket.id)
+        const lockWait = await waitForMarkedLockWaitBeforeCutoff(lockClient, 'encore-reservation-inventory-lock', event.id)
+        assert.equal(lockWait.beforeCutoff, true, 'The reservation must be blocked before the event cutoff for this race to be tested.')
+        await waitUntilDatabaseTime(lockClient, event.id)
+        await lockClient.query('COMMIT')
+        transactionOpen = false
+
+        const result = await reservationPromise
+        assert.equal(result.response.status, 409)
+        assert.match(result.payload.message, /already started/)
+        assert.equal((await prisma.ticket_types.findUnique({ where: { id: ticket.id } })).available_quantity, 8)
+        assert.equal(await prisma.reservations.count({ where: { user_id: fixture.account.id } }), reservationCountBefore)
+      } finally {
+        if (transactionOpen) await lockClient.query('ROLLBACK').catch(() => {})
+        await lockClient.end().catch(() => {})
+        if (reservationPromise) await reservationPromise.catch(() => {})
+      }
+    })
+
     await t.test('reservation validation, trusted prices, ownership, and cancellation', async () => {
       const unauthenticated = await request('/api/reservations', {
         method: 'POST', body: { event_id: event.id, ticket_type_id: ticket.id, quantity: 1 },
@@ -773,6 +925,89 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         method: 'POST', cookie: fixture.account.cookie, headers: { 'Idempotency-Key': randomUUID() },
       })
       assert.equal(cancelledCheckout.response.status, 409)
+    })
+
+    await t.test('checkout rejects a hold at the event start without creating a booking', async (t) => {
+      const checkoutEvent = await createEvent('Checkout Cutoff Fixture')
+      const checkoutTicket = await createTicketType(checkoutEvent.id)
+      const created = await createReservation(fixture.account, checkoutEvent.id, checkoutTicket.id)
+      assert.equal(created.response.status, 201, created.payload?.message)
+      const reservationId = created.payload.data.reservation.id
+      const [databaseCutoff] = await prisma.$queryRaw`SELECT clock_timestamp() AS cutoff`
+      const cutoff = databaseCutoff.cutoff
+      await prisma.events.update({ where: { id: checkoutEvent.id }, data: { starts_at: cutoff } })
+      const key = randomUUID()
+
+      const result = await checkout(fixture.account, reservationId, key)
+      assert.equal(result.response.status, 409)
+      assert.match(result.payload.message, /already started/)
+      assert.equal((await prisma.reservations.findUnique({ where: { id: reservationId } })).status, 'pending')
+      assert.equal(await prisma.bookings.count({ where: { reservation_id: reservationId } }), 0)
+      assert.equal(await prisma.idempotency_keys.count({ where: { user_id: fixture.account.id, operation: 'checkout', idempotency_key: key } }), 0)
+      assert.equal((await prisma.ticket_types.findUnique({ where: { id: checkoutTicket.id } })).available_quantity, 7)
+    })
+
+    await t.test('checkout rolls back when the event becomes past while the booking write is blocked', async () => {
+      const [databaseStart] = await prisma.$queryRaw`SELECT clock_timestamp() + INTERVAL '5 seconds' AS starts_at`
+      const startsAt = databaseStart.starts_at
+      const checkoutEvent = await createEvent('Checkout Lock Cutoff Fixture', 'published', startsAt)
+      const checkoutTicket = await createTicketType(checkoutEvent.id)
+      const created = await createReservation(fixture.account, checkoutEvent.id, checkoutTicket.id)
+      assert.equal(created.response.status, 201, created.payload?.message)
+      const reservationId = created.payload.data.reservation.id
+      const key = randomUUID()
+      const lockClient = new Client({ connectionString: process.env.TEST_DATABASE_URL })
+      let transactionOpen = false
+      let checkoutPromise
+
+      try {
+        await lockClient.connect()
+        await lockClient.query('BEGIN')
+        transactionOpen = true
+        await lockClient.query('LOCK TABLE bookings IN ACCESS EXCLUSIVE MODE')
+
+        checkoutPromise = checkout(fixture.account, reservationId, key)
+        const lockWait = await waitForMarkedLockWaitBeforeCutoff(lockClient, 'encore-checkout-cutoff-write', checkoutEvent.id)
+        assert.equal(lockWait.beforeCutoff, true, 'The checkout must be blocked before the event cutoff for this race to be tested.')
+        await waitUntilDatabaseTime(lockClient, checkoutEvent.id)
+        await lockClient.query('COMMIT')
+        transactionOpen = false
+
+        const result = await checkoutPromise
+        assert.equal(result.response.status, 409)
+        assert.match(result.payload.message, /already started/)
+        assert.equal((await prisma.reservations.findUnique({ where: { id: reservationId } })).status, 'pending')
+        assert.equal(await prisma.bookings.count({ where: { reservation_id: reservationId } }), 0)
+        assert.equal(await prisma.idempotency_keys.count({
+          where: { user_id: fixture.account.id, operation: 'checkout', idempotency_key: key },
+        }), 0)
+        assert.equal((await prisma.ticket_types.findUnique({ where: { id: checkoutTicket.id } })).available_quantity, 7)
+      } finally {
+        if (transactionOpen) await lockClient.query('ROLLBACK').catch(() => {})
+        await lockClient.end().catch(() => {})
+        if (checkoutPromise) await checkoutPromise.catch(() => {})
+      }
+    })
+
+    await t.test('existing booking history remains accessible after its event has started', async () => {
+      const historicalBookingEvent = await createEvent('Historical Booking Fixture')
+      const historicalBookingTicket = await createTicketType(historicalBookingEvent.id)
+      const created = await createReservation(fixture.account, historicalBookingEvent.id, historicalBookingTicket.id)
+      assert.equal(created.response.status, 201)
+      const result = await checkout(fixture.account, created.payload.data.reservation.id)
+      assert.equal(result.response.status, 201)
+      const bookingId = result.payload.data.booking.id
+      await prisma.events.update({
+        where: { id: historicalBookingEvent.id },
+        data: { starts_at: new Date(Date.now() - 1) },
+      })
+
+      const bookings = await request('/api/bookings', { cookie: fixture.account.cookie })
+      assert.equal(bookings.response.status, 200)
+      assert.ok(bookings.payload.data.some((booking) => booking.id === bookingId))
+      const detail = await request(`/api/bookings/${bookingId}`, { cookie: fixture.account.cookie })
+      assert.equal(detail.response.status, 200)
+      assert.equal(detail.payload.data.booking.id, bookingId)
     })
 
     await t.test('expiration races restore inventory once and expired holds cannot check out', async () => {

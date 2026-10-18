@@ -1,6 +1,6 @@
 import { apiUrl } from './apiUrl'
 
-async function requestEventsApi(path, isListRequest = false) {
+async function requestEventsApi(path, isListRequest = false, includeServerTime = false) {
   const url = apiUrl(`/events${path}`)
   let response
 
@@ -28,6 +28,16 @@ async function requestEventsApi(path, isListRequest = false) {
     throw new Error('Encore returned an unexpected event response.')
   }
 
+  if (includeServerTime) {
+    // Express provides a standard HTTP Date header. Use it only to make the
+    // display-only event-start notice resilient to a skewed visitor clock.
+    const serverTime = response.headers.get('date')
+    const serverTimeMs = serverTime ? Date.parse(serverTime) : NaN
+    if (Number.isFinite(serverTimeMs)) {
+      return { ...payload.data, server_now: new Date(serverTimeMs).toISOString() }
+    }
+  }
+
   return payload.data
 }
 
@@ -39,5 +49,5 @@ export function getEvents({ page = 1, pageSize = 12, search = '', availableOnly 
 }
 
 export function getEvent(id) {
-  return requestEventsApi(`/${encodeURIComponent(id)}`)
+  return requestEventsApi(`/${encodeURIComponent(id)}`, false, true)
 }

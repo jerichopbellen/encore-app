@@ -10,17 +10,36 @@ function EventDetails() {
   const { id } = useParams()
   const [loadState, setLoadState] = useState({ id: null, status: 'loading' })
   const [retryCount, setRetryCount] = useState(0)
+  const [startedEventId, setStartedEventId] = useState(null)
   const currentLoadState = loadState.id === id ? loadState : { status: 'loading' }
   const event = currentLoadState.event
   useDocumentTitle(currentLoadState.status === 'success' && event ? event.title : 'Event details')
 
   useEffect(() => {
     let isCurrentRequest = true
+    let startTimer
 
     getEvent(id)
       .then((data) => {
         if (isCurrentRequest) {
           setLoadState({ id, status: 'success', event: data })
+
+          const serverNow = Date.parse(data.server_now)
+          const receivedAt = Date.now()
+          const checkStartTime = () => {
+            if (!isCurrentRequest) return
+            const estimatedServerNow = Number.isFinite(serverNow)
+              ? serverNow + (Date.now() - receivedAt)
+              : Date.now()
+            const timeUntilStart = new Date(data.starts_at).getTime() - estimatedServerNow
+            if (timeUntilStart <= 0) {
+              setStartedEventId(id)
+              return
+            }
+            // Long-lived tabs recheck in safe timer-sized chunks until kickoff.
+            startTimer = window.setTimeout(checkStartTime, Math.min(timeUntilStart, 2_147_000_000))
+          }
+          checkStartTime()
         }
       })
       .catch((error) => {
@@ -33,7 +52,10 @@ function EventDetails() {
         }
       })
 
-    return () => { isCurrentRequest = false }
+    return () => {
+      isCurrentRequest = false
+      window.clearTimeout(startTimer)
+    }
   }, [id, retryCount])
 
   if (currentLoadState.status === 'loading') {
@@ -72,6 +94,7 @@ function EventDetails() {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit',
   })
+  const hasStarted = startedEventId === id
   const startingPrice = getStartingPrice(event.ticket_types)
 
   return (
@@ -111,7 +134,13 @@ function EventDetails() {
             ))}
           </ul>}
       </section>
-      <EventReservationPanel key={event.id} event={event} />
+      {hasStarted ? (
+        <section className="event-started-notice" role="status" aria-labelledby="event-started-title">
+          <p className="eyebrow">EVENT STARTED</p>
+          <h2 id="event-started-title">Reservations are closed</h2>
+          <p>This event has already started. You can still view its details and ticket information.</p>
+        </section>
+      ) : <EventReservationPanel key={event.id} event={event} />}
     </article>
   )
 }

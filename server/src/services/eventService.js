@@ -22,7 +22,9 @@ const publicEventFields = {
 
 async function listPublishedEvents({ page, pageSize, search, availableOnly, sort }) {
   const prisma = await getPrismaClient()
-  const where = { status: 'published' }
+  // Capture one cutoff so count and page results agree for this request.
+  const now = new Date()
+  const where = { status: 'published', starts_at: { gt: now } }
   if (search) {
     where.OR = [
       { title: { contains: search, mode: 'insensitive' } },

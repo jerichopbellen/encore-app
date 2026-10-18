@@ -5,6 +5,7 @@ import process from 'node:process'
 const runId = process.env.E2E_RUN_ID
 const customerPassword = `Encore-e2e-${runId}-Password!`
 const eventId = process.env.E2E_EVENT_ID
+const pastEventId = 'a2000000-0000-4000-8000-000000000002'
 const reservationEventTitle = `Encore E2E ${runId} Reservation Night`
 
 async function enterPassword(page, password) {
@@ -60,6 +61,72 @@ test('customer login persists after refresh through /api/auth/me', async ({ page
   await page.reload()
   expect((await sessionResponse).status()).toBe(200)
   await expect(page.getByRole('button', { name: 'My Account' })).toBeVisible()
+})
+
+test('a past event remains viewable without offering a reservation action', async ({ page }) => {
+  await page.goto(`/events/${pastEventId}`)
+
+  await expect(page.getByRole('heading', { name: `Encore E2E ${runId} Past Showcase` })).toBeVisible()
+  await expect(page.getByRole('status')).toContainText('Reservations are closed')
+  await expect(page.getByRole('heading', { name: 'Past Event Admission' })).toBeVisible()
+  // The reservation panel heading renders for signed-out visitors too, so its
+  // absence shows the panel itself was replaced.
+  await expect(page.getByRole('heading', { name: 'Reserve tickets' })).toHaveCount(0)
+})
+
+test('a signed-in customer cannot reserve tickets for a past event', async ({ page }) => {
+  const email = await registerCustomer(page, 'past-event')
+  await login(page, email, customerPassword)
+  await expect(page.getByRole('button', { name: 'My Account' })).toBeVisible()
+
+  // Control: the same signed-in session is offered the action on an upcoming event.
+  await page.goto(`/events/${eventId}`)
+  await expect(page.getByRole('heading', { name: reservationEventTitle })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reserve tickets' })).toBeVisible()
+
+  const pastEventResponse = page.waitForResponse((response) => (
+    response.url().includes(`/api/events/${pastEventId}`) && response.request().method() === 'GET'
+  ))
+  await page.goto(`/events/${pastEventId}`)
+  const pastEvent = (await (await pastEventResponse).json()).data
+  const [pastTicket] = pastEvent.ticket_types
+
+  await expect(page.getByRole('heading', { name: `Encore E2E ${runId} Past Showcase` })).toBeVisible()
+  await expect(page.getByRole('status')).toContainText('Reservations are closed')
+  await expect(page.getByRole('heading', { name: 'Past Event Admission' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Reserve tickets' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Reserve tickets' })).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: /^Ticket type/ })).toHaveCount(0)
+
+  // The server must refuse the hold even when the browser sends it directly
+  // with the customer's session cookie and the app's own origin.
+  const attempt = await page.evaluate(async ({ eventId: pastId, ticketTypeId }) => {
+    const response = await fetch('/api/reservations', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: pastId, ticket_type_id: ticketTypeId, quantity: 1 }),
+    })
+    return { status: response.status, payload: await response.json() }
+  }, { eventId: pastEventId, ticketTypeId: pastTicket.id })
+  expect(attempt.status).toBe(409)
+  expect(attempt.payload.message).toMatch(/already started/)
+
+  const stateAfterAttempt = await page.evaluate(async (pastId) => {
+    const [eventResponse, reservationsResponse] = await Promise.all([
+      fetch(`/api/events/${pastId}`, { headers: { Accept: 'application/json' } }),
+      fetch('/api/reservations', { credentials: 'include', headers: { Accept: 'application/json' } }),
+    ])
+    return {
+      event: (await eventResponse.json()).data,
+      reservationsStatus: reservationsResponse.status,
+      reservations: (await reservationsResponse.json()).data,
+    }
+  }, pastEventId)
+  const ticketAfterAttempt = stateAfterAttempt.event.ticket_types.find(({ id }) => id === pastTicket.id)
+  expect(ticketAfterAttempt.available_quantity).toBe(pastTicket.available_quantity)
+  expect(stateAfterAttempt.reservationsStatus).toBe(200)
+  expect(stateAfterAttempt.reservations).toEqual([])
 })
 
 test('direct navigation to an account page redirects a signed-out visitor to login', async ({ page }) => {
