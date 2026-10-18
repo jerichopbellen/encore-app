@@ -803,6 +803,10 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 .event-ticket h3, .event-ticket strong { color: var(--ink); }
 .event-ticket p { color: var(--muted-strong); }
 .reservation-panel { padding: clamp(22px, 4vw, 38px); border: 0; background: var(--ink); color: var(--warm-white); }
+.event-started-notice { margin-top: 26px; padding: clamp(22px, 4vw, 38px); border-left: 8px solid var(--burnt-orange); background: var(--cream); color: var(--ink); }
+.event-started-notice .eyebrow { margin: 0 0 9px; color: var(--burnt-orange); font-size: .75rem; font-weight: 850; letter-spacing: .12em; }
+.event-started-notice h2 { margin: 0 0 8px; color: var(--ink); font-size: clamp(1.5rem, 3vw, 2.25rem); }
+.event-started-notice p:last-child { margin: 0; color: var(--muted-strong); line-height: 1.55; }
 .reservation-panel h2, .reservation-panel__success-title { color: var(--warm-white); }
 .reservation-panel .eyebrow { color: var(--festival-orange); }
 .reservation-panel__heading { border-color: #5a534a; }

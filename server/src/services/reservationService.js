@@ -121,11 +121,11 @@ async function releaseExpiredReservations() {
 
 async function createReservation(userId, { event_id, ticket_type_id, quantity }) {
   const prisma = await getPrismaClient()
-  const now = new Date()
-  const expiresAt = new Date(now.getTime() + RESERVATION_HOLD_MINUTES * 60 * 1000)
 
   // Commit expiry cleanup separately so a rejected reservation cannot roll it back.
   await releaseExpiredReservations()
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + RESERVATION_HOLD_MINUTES * 60 * 1000)
 
   const reservation = await prisma.$transaction(async (tx) => {
     const event = await tx.events.findFirst({
@@ -140,12 +140,33 @@ async function createReservation(userId, { event_id, ticket_type_id, quantity })
     })
     if (!ticketType) throw new AppError('That ticket type is not available for this event.', 400)
 
-    // PostgreSQL applies this condition and decrement atomically, including when requests race.
-    const inventory = await tx.ticket_types.updateMany({
-      where: { id: ticket_type_id, event_id, available_quantity: { gte: quantity } },
-      data: { available_quantity: { decrement: quantity } },
-    })
-    if (inventory.count === 0) {
+    // Lock inventory first, then the event row. If either lock waited, the
+    // following statement gets a fresh view of the event and tests its start
+    // time using PostgreSQL's wall clock at the inventory write.
+    await tx.$queryRaw`/* encore-reservation-inventory-lock */
+      SELECT id FROM ticket_types WHERE id = ${ticket_type_id}::uuid FOR UPDATE`
+    await tx.$queryRaw`/* encore-reservation-event-lock */
+      SELECT id FROM events WHERE id = ${event_id}::uuid FOR SHARE`
+
+    const inventory = await tx.$queryRaw`/* encore-reservation-inventory-write */
+      UPDATE ticket_types AS ticket
+      SET available_quantity = ticket.available_quantity - ${quantity}
+      WHERE ticket.id = ${ticket_type_id}::uuid
+        AND ticket.event_id = ${event_id}::uuid
+        AND ticket.available_quantity >= ${quantity}
+        AND EXISTS (
+          SELECT 1 FROM events AS event
+          WHERE event.id = ticket.event_id
+            AND event.status = 'published'
+            AND event.starts_at > clock_timestamp()
+        )
+      RETURNING ticket.id`
+    if (inventory.length === 0) {
+      const [databaseCutoff] = await tx.$queryRaw`SELECT starts_at <= clock_timestamp() AS started
+        FROM events WHERE id = ${event_id}::uuid AND status = 'published'`
+      if (databaseCutoff?.started) {
+        throw new AppError('This event has already started and is no longer available for reservations.', 409)
+      }
       throw new AppError('There are not enough tickets available for that quantity.', 409)
     }
 

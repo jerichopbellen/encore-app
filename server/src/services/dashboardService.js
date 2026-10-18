@@ -60,7 +60,7 @@ async function getDashboardOverview() {
       tx.reservations.count({ where: { status: 'pending', expires_at: { lte: now } } }),
       tx.bookings.count({ where: { status: 'confirmed' } }),
       tx.events.findMany({
-        where: { status: 'published', starts_at: { gte: now } },
+        where: { status: 'published', starts_at: { gt: now } },
         orderBy: { starts_at: 'asc' },
         take: 5,
         select: { id: true, title: true, venue: true, starts_at: true },

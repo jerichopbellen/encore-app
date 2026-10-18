@@ -8,6 +8,7 @@ const {
 } = require('../../client/e2e/support/databaseSafety.cjs')
 
 const EVENT_ID = 'a2000000-0000-4000-8000-000000000001'
+const PAST_EVENT_ID = 'a2000000-0000-4000-8000-000000000002'
 const APP_TABLES = [
   'users',
   'events',
@@ -98,6 +99,25 @@ async function createFixtures() {
         },
       },
     })
+
+    await prisma.events.create({
+      data: {
+        id: PAST_EVENT_ID,
+        title: `Encore E2E ${runId} Past Showcase`,
+        description: 'An isolated past-event browser test fixture.',
+        venue: 'Encore E2E Test Hall',
+        starts_at: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        status: 'published',
+        ticket_types: {
+          create: {
+            name: 'Past Event Admission',
+            price: '10.00',
+            total_quantity: 5,
+            available_quantity: 5,
+          },
+        },
+      },
+    })
   } finally {
     await prisma.$disconnect()
   }
@@ -116,7 +136,7 @@ async function cleanupFixtures() {
         select: { id: true },
       }),
       prisma.events.findMany({
-        where: { OR: [{ id: EVENT_ID }, { title: { startsWith: eventPrefix } }] },
+        where: { OR: [{ id: EVENT_ID }, { id: PAST_EVENT_ID }, { title: { startsWith: eventPrefix } }] },
         select: { id: true },
       }),
     ])
