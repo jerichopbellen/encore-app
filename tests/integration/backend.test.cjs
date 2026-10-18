@@ -57,12 +57,18 @@ async function waitForMarkedLockWaitBeforeCutoff(client, queryMarker, eventId) {
     : `Timed out waiting for a backend blocked at ${queryMarker}.`)
 }
 
-async function waitUntilDatabaseTime(client, eventId) {
+// Prisma's interactive transactions expire after 5000 ms by default, so a
+// request must not stay blocked for the whole fixture lead time. Race tests
+// send it shortly before the cutoff; it still waits across the cutoff.
+const BLOCKED_REQUEST_LEAD_MS = 1500
+
+async function waitUntilDatabaseTime(client, eventId, leadMilliseconds = 0) {
   const deadline = Date.now() + 10_000
   while (Date.now() < deadline) {
     const result = await client.query(
-      'SELECT clock_timestamp() >= starts_at AS reached FROM events WHERE id = $1::uuid',
-      [eventId],
+      `SELECT clock_timestamp() >= starts_at - make_interval(secs => $2::double precision / 1000) AS reached
+       FROM events WHERE id = $1::uuid`,
+      [eventId, leadMilliseconds],
     )
     if (result.rows[0]?.reached) return
     await new Promise((resolve) => setTimeout(resolve, 10))
@@ -853,6 +859,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         transactionOpen = true
         await lockClient.query('SELECT id FROM ticket_types WHERE id = $1::uuid FOR UPDATE', [ticket.id])
 
+        await waitUntilDatabaseTime(lockClient, event.id, BLOCKED_REQUEST_LEAD_MS)
         reservationPromise = createReservation(fixture.account, event.id, ticket.id)
         const lockWait = await waitForMarkedLockWaitBeforeCutoff(lockClient, 'encore-reservation-inventory-lock', event.id)
         assert.equal(lockWait.beforeCutoff, true, 'The reservation must be blocked before the event cutoff for this race to be tested.')
@@ -966,6 +973,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         transactionOpen = true
         await lockClient.query('LOCK TABLE bookings IN ACCESS EXCLUSIVE MODE')
 
+        await waitUntilDatabaseTime(lockClient, checkoutEvent.id, BLOCKED_REQUEST_LEAD_MS)
         checkoutPromise = checkout(fixture.account, reservationId, key)
         const lockWait = await waitForMarkedLockWaitBeforeCutoff(lockClient, 'encore-checkout-cutoff-write', checkoutEvent.id)
         assert.equal(lockWait.beforeCutoff, true, 'The checkout must be blocked before the event cutoff for this race to be tested.')
