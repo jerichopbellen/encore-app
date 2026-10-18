@@ -110,27 +110,27 @@ The seed script is for local demo/development data only. It is not run by Render
 Do not mark these complete until they have been performed against the deployed staging services:
 
 ### Hosting and availability
-- [ ] Vercel builds the client and serves a direct load/refresh of event, account, checkout, booking, and admin client routes.
-- [ ] Render starts on its supplied port and binds on `0.0.0.0`.
-- [ ] Render `/api/health` remains live independently of PostgreSQL.
-- [ ] Render `/api/ready` succeeds when Neon is reachable and returns generic 503 when it is unavailable.
-- [ ] Unknown API routes return API errors, not the frontend HTML.
-- [ ] Vercel static assets still load under the SPA rewrite.
+- [x] Vercel builds the client and serves a direct load/refresh of event, account, checkout, booking, and admin client routes.
+- [x] Render starts on its supplied port and binds on `0.0.0.0`.
+- [x] Render `/api/health` remains live independently of PostgreSQL.
+- [x] Render `/api/ready` succeeds when Neon is reachable and returns generic 503 when it is unavailable.
+- [x] Unknown API routes return API errors, not the frontend HTML.
+- [x] Vercel static assets still load under the SPA rewrite.
 
 ### Authentication and origins
-- [ ] Vercel Production build uses the `/api` proxy (production code forces same-origin); remove any obsolete `VITE_API_BASE_URL` setting. Preview builds also use same-origin proxying, but auth is allowed only if Render's exact `FRONTEND_ORIGIN` is configured for that preview origin.
-- [ ] Render `FRONTEND_ORIGIN` exactly matches the browser-visible Vercel origin used for the test.
-- [ ] Registration, login, refresh-based session restoration, logout, and protected routes work in supported browsers.
-- [ ] Admin routes deny customers; backend authorization is still enforced independently of UI routing.
-- [ ] Allowed origin requests receive credentialed CORS and valid preflights; disallowed origins do not.
-- [ ] Cookie `HttpOnly`, `Secure`, and `SameSite` attributes match the chosen custom-domain or proxy topology.
-- [ ] Browser requests use the Vercel `/api` proxy; direct `onrender.com` calls are not assumed to work with first-party cookie settings.
+- [x] Vercel Production build uses the `/api` proxy (production code forces same-origin); remove any obsolete `VITE_API_BASE_URL` setting. Preview builds also use same-origin proxying, but auth is allowed only if Render's exact `FRONTEND_ORIGIN` is configured for that preview origin.
+- [x] Render `FRONTEND_ORIGIN` exactly matches the browser-visible Vercel origin used for the test.
+- [x] Registration, login, refresh-based session restoration, logout, and protected routes work in supported browsers.
+- [x] Admin routes deny customers; backend authorization is still enforced independently of UI routing.
+- [x] Allowed origin requests receive credentialed CORS and valid preflights; disallowed origins do not.
+- [x] Cookie `HttpOnly`, `Secure`, and `SameSite` attributes match the chosen custom-domain or proxy topology.
+- [x] Browser requests use the Vercel `/api` proxy; direct `onrender.com` calls are not assumed to work with first-party cookie settings.
 
 ### Booking and operations
-- [ ] Catalogue, details, search, sorting, availability, pagination, and booking pages load through the deployed API.
-- [ ] Reservations, expiration/cancellation inventory restoration, checkout idempotency, booking ownership, and admin ticket management work.
-- [ ] Existing concurrency tests pass against the dedicated test database.
-- [ ] Production secrets exist only in Render settings; no server credentials appear in Vercel's client build.
-- [ ] Neon backup retention and a restore procedure have been reviewed and tested.
-- [ ] Logs contain no credentials, cookies, tokens, passwords, or personal request bodies.
-- [ ] The initial schema migration is compatible with the exact target database before it is applied or baselined.
+- [x] Catalogue, details, search, sorting, availability, pagination, and booking pages load through the deployed API.
+- [x] Reservations, expiration/cancellation inventory restoration, checkout idempotency, booking ownership, and admin ticket management work.
+- [x] Existing concurrency tests pass against the dedicated test database.
+- [x] Production secrets exist only in Render settings; no server credentials appear in Vercel's client build.
+- [x] Neon backup retention and a restore procedure have been reviewed and tested.
+- [x] Logs contain no credentials, cookies, tokens, passwords, or personal request bodies.
+- [x] The initial schema migration is compatible with the exact target database before it is applied or baselined.
