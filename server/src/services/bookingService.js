@@ -2,6 +2,7 @@ const AppError = require('../utils/AppError')
 const { getPrismaClient } = require('../config/prisma')
 const { releaseExpiredReservations } = require('./reservationService')
 const { createHash } = require('node:crypto')
+const { getPaymentMode } = require('../config/payments')
 
 const CHECKOUT_OPERATION = 'checkout'
 
@@ -83,7 +84,53 @@ function getReplayResult(record, requestHash) {
   return { outcome: 'replayed', responseStatus: record.response_status, responseBody: record.response_body }
 }
 
+// Shared by simulated checkout and verified Stripe fulfilment so both paths
+// keep the same event-lock and event-start invariants. Returns the new booking
+// ID, or null when the event has already started (nothing is inserted).
+async function insertBookingForReservation(tx, { reservationId, userId, totalCents }) {
+  // Hold the event rows through checkout so an administrator changing an
+  // event's start time cannot race the final booking write. A lock wait
+  // returns the committed event version before the write-time cutoff.
+  await tx.$queryRaw`/* encore-checkout-event-lock */
+    SELECT event.id
+    FROM events AS event
+    WHERE EXISTS (
+      SELECT 1
+      FROM reservation_items AS item
+      JOIN ticket_types AS ticket ON ticket.id = item.ticket_type_id
+      WHERE item.reservation_id = ${reservationId}::uuid
+        AND ticket.event_id = event.id
+    )
+    ORDER BY event.id
+    FOR SHARE OF event`
+
+  // This conditional insert is the authoritative cutoff check. It uses
+  // PostgreSQL wall-clock time at the write, not the earlier Node check.
+  const insertedBookings = await tx.$queryRaw`/* encore-checkout-cutoff-write */
+    INSERT INTO bookings (reservation_id, user_id, status, total_amount)
+    SELECT reservation.id, reservation.user_id, 'confirmed', ${centsToPrice(totalCents)}::numeric
+    FROM reservations AS reservation
+    WHERE reservation.id = ${reservationId}::uuid
+      AND reservation.user_id = ${userId}::uuid
+      AND NOT EXISTS (
+        SELECT 1
+        FROM reservation_items AS item
+        JOIN ticket_types AS ticket ON ticket.id = item.ticket_type_id
+        JOIN events AS event ON event.id = ticket.event_id
+        WHERE item.reservation_id = reservation.id
+          AND event.starts_at <= clock_timestamp()
+      )
+    RETURNING id`
+  return insertedBookings.length === 0 ? null : insertedBookings[0].id
+}
+
 async function checkoutReservation(userId, reservationId, idempotencyKey) {
+  // Simulated checkout must never bypass Stripe. This is the first statement,
+  // before any database work, and applies to every caller of the service.
+  if (getPaymentMode() === 'stripe') {
+    throw new AppError('This reservation must be paid through Stripe Checkout.', 409)
+  }
+
   const prisma = await getPrismaClient()
   const requestHash = checkoutRequestHash(reservationId)
   const keyWhere = {
@@ -144,40 +191,8 @@ async function checkoutReservation(userId, reservationId, idempotencyKey) {
         0n,
       )
 
-      // Hold the event rows through checkout so an administrator changing an
-      // event's start time cannot race the final booking write. A lock wait
-      // returns the committed event version before the write-time cutoff.
-      await tx.$queryRaw`/* encore-checkout-event-lock */
-        SELECT event.id
-        FROM events AS event
-        WHERE EXISTS (
-          SELECT 1
-          FROM reservation_items AS item
-          JOIN ticket_types AS ticket ON ticket.id = item.ticket_type_id
-          WHERE item.reservation_id = ${reservationId}::uuid
-            AND ticket.event_id = event.id
-        )
-        ORDER BY event.id
-        FOR SHARE OF event`
-
-      // This conditional insert is the authoritative cutoff check. It uses
-      // PostgreSQL wall-clock time at the write, not the earlier Node check.
-      const insertedBookings = await tx.$queryRaw`/* encore-checkout-cutoff-write */
-        INSERT INTO bookings (reservation_id, user_id, status, total_amount)
-        SELECT reservation.id, reservation.user_id, 'confirmed', ${centsToPrice(totalCents)}::numeric
-        FROM reservations AS reservation
-        WHERE reservation.id = ${reservationId}::uuid
-          AND reservation.user_id = ${userId}::uuid
-          AND NOT EXISTS (
-            SELECT 1
-            FROM reservation_items AS item
-            JOIN ticket_types AS ticket ON ticket.id = item.ticket_type_id
-            JOIN events AS event ON event.id = ticket.event_id
-            WHERE item.reservation_id = reservation.id
-              AND event.starts_at <= clock_timestamp()
-          )
-        RETURNING id`
-      if (insertedBookings.length === 0) {
+      const bookingId = await insertBookingForReservation(tx, { reservationId, userId, totalCents })
+      if (!bookingId) {
         throw new AppError('This event has already started and is no longer available for checkout.', 409)
       }
 
@@ -224,4 +239,11 @@ async function getBookingForUser(userId, bookingId) {
   return booking ? serializeBooking(booking) : null
 }
 
-module.exports = { checkoutReservation, listBookings, getBookingForUser }
+module.exports = {
+  checkoutReservation,
+  insertBookingForReservation,
+  listBookings,
+  getBookingForUser,
+  priceToCents,
+  centsToPrice,
+}
