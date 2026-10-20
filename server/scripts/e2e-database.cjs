@@ -17,6 +17,8 @@ const APP_TABLES = [
   'reservation_items',
   'bookings',
   'idempotency_keys',
+  'payment_attempts',
+  'stripe_webhook_events',
 ]
 
 function ensureDatabaseEnvironment() {
@@ -147,6 +149,19 @@ async function cleanupFixtures() {
       : []
     const reservationIds = reservations.map(({ id }) => id)
 
+    if (reservationIds.length) {
+      // Payment attempts reference bookings and reservations, and webhook rows reference attempts,
+      // so they are removed first. Only rows belonging to this run's reservations are touched.
+      const attempts = await prisma.payment_attempts.findMany({
+        where: { reservation_id: { in: reservationIds } },
+        select: { id: true },
+      })
+      const attemptIds = attempts.map(({ id }) => id)
+      if (attemptIds.length) {
+        await prisma.stripe_webhook_events.deleteMany({ where: { payment_attempt_id: { in: attemptIds } } })
+        await prisma.payment_attempts.deleteMany({ where: { id: { in: attemptIds } } })
+      }
+    }
     if (userIds.length || reservationIds.length) {
       await prisma.bookings.deleteMany({
         where: {

@@ -9,6 +9,7 @@ import AuthPage from './pages/auth/AuthPage'
 import ProfilePage from './pages/profile/ProfilePage'
 import ReservationsPage from './pages/reservations/ReservationsPage'
 import CheckoutPage from './pages/checkout/CheckoutPage'
+import PaymentReturnPage from './pages/checkout/PaymentReturnPage'
 import BookingConfirmationPage from './pages/bookings/BookingConfirmationPage'
 import BookingsPage from './pages/bookings/BookingsPage'
 import AdminEventsPage from './pages/admin/AdminEventsPage'
@@ -66,6 +67,7 @@ function App() {
             <Route path="/profile" element={<Navigate to="/account/profile" replace />} />
             <Route path="/reservations" element={<Navigate to="/account/reservations" replace />} />
             <Route path="/reservations/:reservationId/checkout" element={<CheckoutPage />} />
+            <Route path="/reservations/:reservationId/payment/return" element={<PaymentReturnPage />} />
             <Route path="/bookings" element={<Navigate to="/account/bookings" replace />} />
             <Route path="/bookings/:bookingId" element={<BookingConfirmationPage />} />
             <Route path="/admin" element={<AdminDashboardPage />} />

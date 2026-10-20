@@ -33,6 +33,9 @@ async function cancelReservation(req, res) {
   if (result.outcome === 'not-pending') {
     throw new AppError('Only a pending reservation can be cancelled.', 409)
   }
+  if (result.outcome === 'payment-in-progress') {
+    throw new AppError('A payment is in progress for this reservation. It can be cancelled after the payment window closes.', 409)
+  }
   return res.status(200).json({ success: true, data: { reservation: result.reservation } })
 }
 

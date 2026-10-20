@@ -1,3 +1,5 @@
+const { validatePaymentEnvironment } = require('./payments')
+
 const DEFAULT_PORT = 5000
 const DATABASE_PROTOCOLS = new Set(['postgres:', 'postgresql:'])
 const SECURE_SSL_MODES = new Set(['require', 'verify-ca', 'verify-full'])
@@ -42,6 +44,8 @@ function validateFrontendOrigin(value) {
 
 function validateEnvironment(env = process.env) {
   const port = parsePort(env.PORT)
+  // Fails startup on an unknown PAYMENT_PROVIDER or incomplete Stripe test configuration.
+  validatePaymentEnvironment(env)
   const cookieSameSite = String(env.COOKIE_SAME_SITE || 'lax').toLowerCase()
   if (!COOKIE_SAME_SITE_VALUES.has(cookieSameSite)) {
     throw new Error('COOKIE_SAME_SITE must be one of: lax, strict, none.')
