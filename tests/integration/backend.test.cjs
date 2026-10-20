@@ -7,6 +7,8 @@ const { configureTestDatabase } = require('../helpers/testDatabase.cjs')
 // Configure Prisma before requiring the app: the ordinary server/.env is never
 // allowed to select a database for this suite.
 configureTestDatabase()
+// This suite covers simulated checkout; server/.env must never switch it to Stripe.
+process.env.PAYMENT_PROVIDER = 'simulated'
 const app = require('../../server/src/app')
 const { getPrismaClient, disconnectPrisma } = require('../../server/src/config/prisma')
 
@@ -193,6 +195,8 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         prisma.reservation_items,
         prisma.bookings,
         prisma.idempotency_keys,
+        prisma.payment_attempts,
+        prisma.stripe_webhook_events,
       ].map((table) => table.count()))
     } catch (error) {
       const safeCode = typeof error.code === 'string' && /^[A-Z0-9]+$/.test(error.code)

@@ -107,6 +107,12 @@ async function expirePendingReservations(tx, now) {
 
       expiredCount += 1
       await restoreInventoryForReservation(tx, reservation.id)
+      // A hold only expires after its Stripe session has, so no live attempt can
+      // still be paid. Closing it here keeps abandoned attempts from lingering.
+      await tx.payment_attempts.updateMany({
+        where: { reservation_id: reservation.id, status: { in: ['creating', 'open'] } },
+        data: { status: 'expired', updated_at: new Date() },
+      })
     }
   }
 
@@ -225,6 +231,10 @@ async function cancelReservation(userId, reservationId) {
       select: { ticket_type_id: true },
     })
     await lockTicketTypes(tx, reservationItems.map((item) => item.ticket_type_id))
+    // Lock order is tickets, then the reservation row, then payment attempts. Payment
+    // initiation locks the same reservation row, so a new attempt cannot appear
+    // between the attempt check below and the cancellation update.
+    await tx.$queryRaw`SELECT id FROM reservations WHERE id = ${reservationId}::uuid AND user_id = ${userId}::uuid FOR UPDATE`
     const currentReservation = await tx.reservations.findFirst({
       where: { id: reservationId, user_id: userId },
       select: { id: true, status: true, expires_at: true },
@@ -233,6 +243,12 @@ async function cancelReservation(userId, reservationId) {
     if (currentReservation.status !== 'pending') {
       return { outcome: currentReservation.status === 'expired' ? 'expired' : 'not-pending' }
     }
+
+    // Releasing tickets while a Stripe session can still be paid would sell them twice.
+    const liveAttempts = await tx.payment_attempts.count({
+      where: { reservation_id: reservationId, status: { in: ['creating', 'open'] } },
+    })
+    if (liveAttempts > 0) return { outcome: 'payment-in-progress' }
 
     const cancelNow = new Date()
     const cancelled = await tx.reservations.updateMany({
