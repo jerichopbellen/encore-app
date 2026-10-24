@@ -56,74 +56,97 @@ function AdminDashboardPage() {
   const tickets = dashboard.ticket_inventory
   const reservations = dashboard.reservation_counts
 
+  // Items that need an administrator's attention; each links to where it is handled.
+  const todoItems = [
+    {
+      label: 'Draft events to review and publish',
+      count: events.draft,
+      to: '/admin/events',
+      state: { status: 'draft' },
+      action: 'Review drafts',
+    },
+    {
+      label: 'Expired holds awaiting processing',
+      count: reservations.pending_expired,
+      hint: 'Tickets return to inventory when the next reservation activity processes them.',
+    },
+  ]
+  const reservationActivity = [
+    ['Active holds', reservations.pending],
+    ['Confirmed', reservations.confirmed],
+    ['Cancelled', reservations.cancelled],
+    ['Expired', reservations.expired],
+    ...(reservations.other > 0 ? [['Other statuses', reservations.other]] : []),
+  ]
+
   return (
     <section className="admin-dashboard" aria-labelledby="admin-dashboard-title">
       <header className="admin-dashboard__heading">
         <div>
           <p className="eyebrow">ENCORE ADMIN</p>
-          <h1 id="admin-dashboard-title">Dashboard overview</h1>
+          <h1 id="admin-dashboard-title">Dashboard</h1>
           <p>A current snapshot of your events, ticket inventory, reservations, and bookings.</p>
         </div>
-        <Link className="button-link" to="/admin/events">Manage events</Link>
+        <div className="admin-dashboard__actions">
+          <Link className="admin-events__secondary" to="/admin/events">Manage events</Link>
+          <Link className="button-link" to="/admin/events/new">Create event</Link>
+        </div>
       </header>
 
-      <section className="admin-dashboard__overview" aria-label="Platform overview">
-        <article className="admin-dashboard__hero-card admin-dashboard__hero-card--events">
-          <div className="admin-dashboard__card-kicker">
-            <span>Event catalogue</span>
-            <span>All statuses</span>
-          </div>
-          <div className="admin-dashboard__primary-value">
-            <span>Total events</span>
-            <strong>{events.total.toLocaleString()}</strong>
-          </div>
-          <div className="admin-dashboard__event-breakdown">
-            <div><span>Published</span><strong>{events.published.toLocaleString()}</strong></div>
-            <div><span>Drafts</span><strong>{events.draft.toLocaleString()}</strong></div>
-          </div>
-        </article>
+      <dl className="admin-dashboard__strip" aria-label="Key figures">
+        <div className="admin-dashboard__figure">
+          <dt>Events</dt>
+          <dd className="admin-dashboard__figure-value">{events.total.toLocaleString()}</dd>
+          <dd>{events.published.toLocaleString()} published · {events.draft.toLocaleString()} {events.draft === 1 ? 'draft' : 'drafts'}</dd>
+        </div>
+        <div className="admin-dashboard__figure">
+          <dt>Tickets left</dt>
+          <dd className="admin-dashboard__figure-value">{tickets.available_quantity.toLocaleString()}</dd>
+          <dd>of {tickets.total_capacity.toLocaleString()} capacity · {tickets.ticket_type_count.toLocaleString()} ticket {tickets.ticket_type_count === 1 ? 'type' : 'types'}</dd>
+        </div>
+        <div className="admin-dashboard__figure">
+          <dt>Active holds</dt>
+          <dd className="admin-dashboard__figure-value">{reservations.pending.toLocaleString()}</dd>
+          <dd>reservations awaiting checkout</dd>
+        </div>
+        <div className="admin-dashboard__figure">
+          <dt>Bookings</dt>
+          <dd className="admin-dashboard__figure-value">{dashboard.confirmed_booking_count.toLocaleString()}</dd>
+          <dd>confirmed through checkout</dd>
+        </div>
+      </dl>
 
-        <article className="admin-dashboard__hero-card admin-dashboard__hero-card--inventory">
-          <div className="admin-dashboard__card-kicker">
-            <span>Ticket inventory</span>
-            <span>{tickets.ticket_type_count.toLocaleString()} ticket types</span>
-          </div>
-          <div className="admin-dashboard__primary-value admin-dashboard__primary-value--inventory">
-            <span>Available tickets</span>
-            <strong>{tickets.available_quantity.toLocaleString()}</strong>
-          </div>
-          <div className="admin-dashboard__capacity-summary">
-            <span>Total capacity</span>
-            <strong>{tickets.total_capacity.toLocaleString()}</strong>
-          </div>
-          <Link className="admin-dashboard__text-link" to="/admin/events">Manage ticket types by event <span aria-hidden="true">→</span></Link>
-        </article>
-      </section>
-
-      <div className="admin-dashboard__operations">
-        <section className="admin-dashboard__panel" aria-labelledby="reservation-summary-title">
+      <div className="admin-dashboard__columns">
+        <section className="admin-dashboard__panel" aria-labelledby="needs-attention-title">
           <header className="admin-dashboard__panel-heading">
             <div>
-              <p className="eyebrow">BOOKING ACTIVITY</p>
-              <h2 id="reservation-summary-title">Reservations</h2>
+              <p className="eyebrow">NEEDS ATTENTION</p>
+              <h2 id="needs-attention-title">To do</h2>
             </div>
-            <span className="admin-dashboard__count-pill">{reservations.total.toLocaleString()} total</span>
           </header>
+          <ul className="admin-dashboard__todo">
+            {todoItems.map((item) => (
+              <li key={item.label} className={item.count > 0 ? 'admin-dashboard__todo-item admin-dashboard__todo-item--active' : 'admin-dashboard__todo-item'}>
+                <div>
+                  <span>{item.label}</span>
+                  {item.count > 0 && item.to && (
+                    <Link className="admin-dashboard__text-link" to={item.to} state={item.state}>{item.action} <span aria-hidden="true">→</span></Link>
+                  )}
+                  {item.count > 0 && item.hint && <small>{item.hint}</small>}
+                </div>
+                <strong>{item.count > 0 ? item.count.toLocaleString() : 'All clear'}</strong>
+              </li>
+            ))}
+          </ul>
+          <h3 className="admin-dashboard__subheading">Reservation activity <span>{reservations.total.toLocaleString()} total</span></h3>
           <dl className="admin-dashboard__status-list">
-            <div><dt>Active pending</dt><dd>{reservations.pending.toLocaleString()}</dd></div>
-            <div><dt>Confirmed reservations</dt><dd>{reservations.confirmed.toLocaleString()}</dd></div>
-            <div><dt>Cancelled</dt><dd>{reservations.cancelled.toLocaleString()}</dd></div>
-            <div><dt>Expired</dt><dd>{reservations.expired.toLocaleString()}</dd></div>
-            <div className="admin-dashboard__status-list-wide"><dt>Expired holds awaiting processing</dt><dd>{reservations.pending_expired.toLocaleString()}</dd></div>
-            {reservations.other > 0 && <div><dt>Other statuses</dt><dd>{reservations.other.toLocaleString()}</dd></div>}
+            {reservationActivity.map(([label, count]) => (
+              <div key={label}><dt>{label}</dt><dd>{count.toLocaleString()}</dd></div>
+            ))}
           </dl>
-          <div className="admin-dashboard__booking-summary">
-            <div><span>Confirmed bookings</span><small>Simulated checkout completed</small></div>
-            <strong>{dashboard.confirmed_booking_count.toLocaleString()}</strong>
-          </div>
         </section>
 
-        <section className="admin-dashboard__panel admin-dashboard__upcoming" aria-labelledby="upcoming-events-title">
+        <section className="admin-dashboard__panel" aria-labelledby="upcoming-events-title">
           <header className="admin-dashboard__panel-heading">
             <div>
               <p className="eyebrow">WHAT’S NEXT</p>
@@ -132,7 +155,10 @@ function AdminDashboardPage() {
             <Link className="admin-dashboard__text-link" to="/admin/events">View all <span aria-hidden="true">→</span></Link>
           </header>
           {dashboard.upcoming_events.length === 0 ? (
-            <p className="admin-dashboard__empty">No upcoming published events. Publish an event to feature it here.</p>
+            <div className="admin-dashboard__empty">
+              <p>No upcoming published events. Publish an event to feature it here.</p>
+              <Link className="admin-dashboard__text-link" to="/admin/events" state={{ status: 'draft' }}>Review drafts <span aria-hidden="true">→</span></Link>
+            </div>
           ) : (
             <ul className="admin-dashboard__event-list">
               {dashboard.upcoming_events.map((event) => (
@@ -143,8 +169,7 @@ function AdminDashboardPage() {
                   </div>
                   <div className="admin-dashboard__event-info">
                     <h3>{event.title}</h3>
-                    <p>{event.venue}</p>
-                    <time dateTime={event.starts_at}>{formatEventDate(event.starts_at, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</time>
+                    <p>{event.venue} · <time dateTime={event.starts_at}>{formatEventDate(event.starts_at, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</time></p>
                   </div>
                   <Link to={`/admin/events/${event.id}`} aria-label={`Manage ${event.title}`}>Manage</Link>
                 </li>

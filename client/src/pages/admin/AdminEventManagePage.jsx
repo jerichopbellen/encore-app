@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router'
 import AdminEventForm from '../../components/admin/AdminEventForm'
 import TicketTypesManager from '../../components/admin/TicketTypesManager'
+import AdminEventOverview from '../../components/admin/AdminEventOverview'
+import AdminEventPosterPanel from '../../components/admin/AdminEventPosterPanel'
 import EventArtwork from '../../components/events/EventArtwork'
 import {
   getAdminEvents,
@@ -14,9 +16,17 @@ import { formatEventDate } from '../../utils/eventDisplay'
 import useUnsavedChanges from '../../hooks/useUnsavedChanges'
 import useDocumentTitle from '../../hooks/useDocumentTitle'
 
+const WORKSPACE_TABS = [
+  ['overview', 'Overview'],
+  ['details', 'Details'],
+  ['tickets', 'Ticket types'],
+  ['poster', 'Poster'],
+]
+
 function AdminEventManagePage() {
   const { eventId } = useParams()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [event, setEvent] = useState(null)
   const [loadState, setLoadState] = useState('loading')
   const [loadedEventId, setLoadedEventId] = useState(null)
@@ -24,6 +34,8 @@ function AdminEventManagePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [detailsDirty, setDetailsDirty] = useState(false)
   const [ticketsDirty, setTicketsDirty] = useState(false)
+  const [posterDirty, setPosterDirty] = useState(false)
+  const [ticketTypes, setTicketTypes] = useState([])
   const [isSaving, setIsSaving] = useState(false)
   const [pendingStatusChange, setPendingStatusChange] = useState(false)
   const [errorMessage, setErrorMessage] = useState(location.state?.error || '')
@@ -32,7 +44,18 @@ function AdminEventManagePage() {
   const submissionLock = useRef(false)
   const updateDetailsDirty = useCallback((dirty) => setDetailsDirty(dirty), [])
   const updateTicketsDirty = useCallback((dirty) => setTicketsDirty(dirty), [])
-  const hasUnsavedChanges = detailsDirty || ticketsDirty
+  const updatePosterDirty = useCallback((dirty) => setPosterDirty(dirty), [])
+  const hasUnsavedChanges = detailsDirty || ticketsDirty || posterDirty
+  // The tab lives in the URL (?tab=poster) so reloads and shared links keep it. A failed
+  // poster upload from the create page opens the Poster tab to retry.
+  const requestedTab = searchParams.get('tab')
+  const activeTab = WORKSPACE_TABS.some(([id]) => id === requestedTab)
+    ? requestedTab
+    : location.state?.error ? 'poster' : 'overview'
+
+  function selectTab(tab) {
+    setSearchParams(tab === 'overview' ? {} : { tab }, { replace: true })
+  }
 
   useUnsavedChanges(hasUnsavedChanges)
 
@@ -43,6 +66,7 @@ function AdminEventManagePage() {
         if (!isCurrentRequest) return
         const selectedEvent = events.find((item) => item.id === eventId)
         setEvent(selectedEvent || null)
+        setTicketTypes(selectedEvent?.ticket_types || [])
         setLoadedEventId(eventId)
         setLoadState(selectedEvent ? 'success' : 'not-found')
       })
@@ -149,38 +173,95 @@ function AdminEventManagePage() {
     )
   }
 
+  function focusTab(tab) {
+    selectTab(tab)
+    // Wait for the re-render so the newly selected tab is focusable.
+    window.requestAnimationFrame(() => document.getElementById(`admin-event-tab-${tab}`)?.focus())
+  }
+
+  function handleTabKeyDown(keyEvent) {
+    const index = WORKSPACE_TABS.findIndex(([id]) => id === activeTab)
+    const lastIndex = WORKSPACE_TABS.length - 1
+    const nextIndex = {
+      ArrowRight: index === lastIndex ? 0 : index + 1,
+      ArrowLeft: index === 0 ? lastIndex : index - 1,
+      Home: 0,
+      End: lastIndex,
+    }[keyEvent.key]
+    if (nextIndex === undefined) return
+    keyEvent.preventDefault()
+    focusTab(WORKSPACE_TABS[nextIndex][0])
+  }
+
+  function beginEditing() {
+    setErrorMessage('')
+    setIsEditing(true)
+    selectTab('details')
+  }
+
   return (
-    <section className="admin-event-page" aria-labelledby="admin-event-title">
+    <section className="admin-event-page admin-event-workspace" aria-labelledby="admin-event-title">
       <nav className="admin-event-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/admin/events">Admin events</Link><span aria-hidden="true">/</span><span>Event workspace</span>
+        <Link to="/admin/events">Admin events</Link><span aria-hidden="true">/</span><span>{event.title}</span>
       </nav>
       <header className="admin-event-workspace__heading">
+        <div className="admin-event-workspace__poster" aria-hidden="true"><EventArtwork event={event} /></div>
         <div className="admin-event-workspace__identity">
-          <div className="admin-event-card__topline">
-            <span className={`admin-event-status admin-event-status--${event.status}`}>{event.status === 'published' ? 'Published' : 'Draft'}</span>
-            <time dateTime={event.starts_at}>{formatEventDate(event.starts_at, { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
-          </div>
+          <p className="admin-event-workspace__meta">
+            <span className={`admin-event-badge admin-event-badge--${event.status}`}>{event.status === 'published' ? 'Published' : 'Draft'}</span>
+            <time dateTime={event.starts_at}>{formatEventDate(event.starts_at, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
+            <span>{event.venue}</span>
+          </p>
           <h1 id="admin-event-title">{event.title}</h1>
-          <p>{event.venue}</p>
         </div>
         <div className="admin-event-workspace__actions">
-          {!isEditing && <button className="admin-events__secondary" type="button" onClick={() => { setErrorMessage(''); setIsEditing(true) }}>Edit event details</button>}
-          {event.status === 'published' && <Link className="admin-event-workspace__public" to={`/events/${event.id}`}>View public event</Link>}
-          {!isEditing && (
-            <button className={`button-link admin-event-workspace__status-action admin-event-workspace__status-action--${event.status}`} type="button" onClick={handleStatusChange} disabled={pendingStatusChange || hasUnsavedChanges}>
-              {pendingStatusChange ? 'Saving…' : event.status === 'published' ? 'Unpublish event' : 'Publish event'}
-            </button>
-          )}
+          {event.status === 'published' && <Link className="admin-events__secondary" to={`/events/${event.id}`}>View public event</Link>}
+          <button className={`button-link admin-event-workspace__status-action admin-event-workspace__status-action--${event.status}`} type="button" onClick={handleStatusChange} disabled={pendingStatusChange || hasUnsavedChanges}>
+            {pendingStatusChange ? 'Saving…' : event.status === 'published' ? 'Unpublish' : 'Publish event'}
+          </button>
         </div>
       </header>
+      {hasUnsavedChanges && <p className="admin-event-workspace__hint">Save or discard your changes before changing the event's visibility.</p>}
 
       {notice && <p className="admin-events__message admin-events__message--success" role="status">{notice}</p>}
       {errorMessage && !isEditing && <p className="admin-events__message admin-events__message--error" role="alert">{errorMessage}</p>}
 
-      <section className="admin-event-workspace__section" aria-labelledby="admin-event-details-heading">
-        <div className="admin-event-workspace__section-heading">
-          <div><p className="eyebrow">EVENT INFORMATION</p><h2 id="admin-event-details-heading">Event details</h2></div>
-        </div>
+      <div className="admin-event-tabs" role="tablist" aria-label="Event workspace sections" onKeyDown={handleTabKeyDown}>
+        {WORKSPACE_TABS.map(([id, label]) => (
+          <button
+            key={id}
+            id={`admin-event-tab-${id}`}
+            className="admin-event-tabs__tab"
+            type="button"
+            role="tab"
+            aria-selected={activeTab === id}
+            aria-controls={`admin-event-panel-${id}`}
+            tabIndex={activeTab === id ? 0 : -1}
+            onClick={() => selectTab(id)}
+          >
+            {label}
+            {id === 'tickets' && <span className="admin-event-tabs__count">{ticketTypes.length}</span>}
+            {((id === 'details' && detailsDirty) || (id === 'tickets' && ticketsDirty) || (id === 'poster' && posterDirty)) && (
+              <span className="admin-event-tabs__dirty" title="Unsaved changes"><span className="sr-only">(unsaved changes)</span></span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Panels stay mounted while hidden so unsaved work survives switching tabs. */}
+      <div className="admin-event-tabs__panel" id="admin-event-panel-overview" role="tabpanel" aria-labelledby="admin-event-tab-overview" hidden={activeTab !== 'overview'}>
+        <AdminEventOverview
+          event={event}
+          ticketTypes={ticketTypes}
+          onOpenTab={selectTab}
+          onEditDetails={beginEditing}
+          onStatusChange={handleStatusChange}
+          isStatusPending={pendingStatusChange}
+          isStatusBlocked={hasUnsavedChanges}
+        />
+      </div>
+
+      <div className="admin-event-tabs__panel" id="admin-event-panel-details" role="tabpanel" aria-labelledby="admin-event-tab-details" hidden={activeTab !== 'details'}>
         {isEditing ? (
           <AdminEventForm
             key={event.id}
@@ -194,28 +275,39 @@ function AdminEventManagePage() {
             savingLabel={savingLabel}
           />
         ) : (
-          <dl className="admin-event-details">
-            <div><dt>Title</dt><dd>{event.title}</dd></div>
-            <div><dt>Venue</dt><dd>{event.venue}</dd></div>
-            <div><dt>Date and time</dt><dd>{formatEventDate(event.starts_at, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</dd></div>
-            <div className="admin-event-details__description"><dt>Description</dt><dd>{event.description || 'No description provided.'}</dd></div>
-            <div className="admin-event-details__poster">
-              <dt>Poster</dt>
-              <dd>
-                <EventArtwork event={event} />
-                <span>{event.poster_url ? 'Custom poster' : 'Encore default generated poster'}</span>
-              </dd>
+          <div className="admin-event-details-card">
+            <div className="admin-event-details-card__heading">
+              <div><p className="eyebrow">EVENT INFORMATION</p><h2>Details</h2></div>
+              <button className="admin-events__secondary" type="button" onClick={beginEditing}>Edit details</button>
             </div>
-          </dl>
+            <dl className="admin-event-details">
+              <div><dt>Title</dt><dd>{event.title}</dd></div>
+              <div><dt>Venue</dt><dd>{event.venue}</dd></div>
+              <div><dt>Date and time</dt><dd>{formatEventDate(event.starts_at, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</dd></div>
+              <div><dt>Status</dt><dd>{event.status === 'published' ? 'Published' : 'Draft'}</dd></div>
+              <div className="admin-event-details__description"><dt>Description</dt><dd>{event.description || 'No description provided.'}</dd></div>
+            </dl>
+          </div>
         )}
-      </section>
+      </div>
 
-      <section className="admin-event-workspace__section" aria-labelledby="admin-ticket-types-heading">
-        <div className="admin-event-workspace__section-heading">
-          <div><p className="eyebrow">INVENTORY</p><h2 id="admin-ticket-types-heading">Ticket types</h2><p>Manage prices and capacity for {event.title}.</p></div>
-        </div>
-        <TicketTypesManager key={event.id} eventId={event.id} onUnsavedChange={updateTicketsDirty} />
-      </section>
+      <div className="admin-event-tabs__panel" id="admin-event-panel-tickets" role="tabpanel" aria-labelledby="admin-event-tab-tickets" hidden={activeTab !== 'tickets'}>
+        <TicketTypesManager
+          key={event.id}
+          eventId={event.id}
+          onUnsavedChange={updateTicketsDirty}
+          onTicketTypesChange={setTicketTypes}
+        />
+      </div>
+
+      <div className="admin-event-tabs__panel" id="admin-event-panel-poster" role="tabpanel" aria-labelledby="admin-event-tab-poster" hidden={activeTab !== 'poster'}>
+        <AdminEventPosterPanel
+          key={event.id}
+          event={event}
+          onEventChange={setEvent}
+          onDirtyChange={updatePosterDirty}
+        />
+      </div>
     </section>
   )
 }

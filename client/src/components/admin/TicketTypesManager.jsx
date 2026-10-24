@@ -72,7 +72,7 @@ function TicketTypeForm({ draft, setDraft, onSubmit, onCancel, isSaving, isEditi
   )
 }
 
-function TicketTypesManager({ eventId, onUnsavedChange = () => {} }) {
+function TicketTypesManager({ eventId, onUnsavedChange = () => {}, onTicketTypesChange = () => {} }) {
   const [ticketTypes, setTicketTypes] = useState([])
   const [loadState, setLoadState] = useState('loading')
   const [loadError, setLoadError] = useState('')
@@ -90,6 +90,11 @@ function TicketTypesManager({ eventId, onUnsavedChange = () => {} }) {
   useEffect(() => {
     onUnsavedChange(isDirty)
   }, [isDirty, onUnsavedChange])
+
+  // Lets the workspace keep its overview figures in step with ticket edits.
+  useEffect(() => {
+    if (loadState === 'success') onTicketTypesChange(ticketTypes)
+  }, [loadState, ticketTypes, onTicketTypesChange])
 
   useEffect(() => {
     let isCurrent = true
