@@ -2,7 +2,8 @@ const AppError = require('../utils/AppError')
 const eventService = require('../services/eventService')
 const ticketTypeService = require('../services/ticketTypeService')
 const dashboardService = require('../services/dashboardService')
-const { serializeEvent } = require('../utils/eventSerializer')
+const eventPosterService = require('../services/eventPosterService')
+const { serializeAdminEvent } = require('../utils/eventSerializer')
 const {
   normalizeCreateEventInput,
   normalizeUpdateEventInput,
@@ -13,10 +14,11 @@ const {
   normalizeCreateTicketTypeInput,
   normalizeUpdateTicketTypeInput,
 } = require('../validators/ticketTypeValidator')
+const { validatePosterUpload, normalizeExpectedPoster } = require('../validators/posterValidator')
 
 async function listEvents(req, res) {
   const events = await eventService.listAdminEvents()
-  return res.status(200).json({ success: true, data: events.map(serializeEvent) })
+  return res.status(200).json({ success: true, data: events.map(serializeAdminEvent) })
 }
 
 async function getDashboard(req, res) {
@@ -27,7 +29,7 @@ async function getDashboard(req, res) {
 async function createEvent(req, res) {
   const input = normalizeCreateEventInput(req.body)
   const event = await eventService.createEvent(input)
-  return res.status(201).json({ success: true, data: serializeEvent(event) })
+  return res.status(201).json({ success: true, data: serializeAdminEvent(event) })
 }
 
 async function updateEvent(req, res) {
@@ -35,7 +37,7 @@ async function updateEvent(req, res) {
   const input = normalizeUpdateEventInput(req.body)
   const event = await eventService.updateEvent(req.params.eventId, input)
   if (!event) throw new AppError('Event not found.', 404)
-  return res.status(200).json({ success: true, data: serializeEvent(event) })
+  return res.status(200).json({ success: true, data: serializeAdminEvent(event) })
 }
 
 async function updateEventStatus(req, res) {
@@ -43,7 +45,24 @@ async function updateEventStatus(req, res) {
   const { status } = normalizeEventStatusInput(req.body)
   const event = await eventService.updateEventStatus(req.params.eventId, status)
   if (!event) throw new AppError('Event not found.', 404)
-  return res.status(200).json({ success: true, data: serializeEvent(event) })
+  return res.status(200).json({ success: true, data: serializeAdminEvent(event) })
+}
+
+async function uploadEventPoster(req, res) {
+  validateEventId(req.params.eventId)
+  const expectedPublicId = normalizeExpectedPoster(req.query.expected_poster)
+  validatePosterUpload(req.body, req.get('Content-Type'))
+  const event = await eventPosterService.uploadEventPoster(req.params.eventId, { buffer: req.body, expectedPublicId })
+  if (!event) throw new AppError('Event not found.', 404)
+  return res.status(200).json({ success: true, data: serializeAdminEvent(event) })
+}
+
+async function removeEventPoster(req, res) {
+  validateEventId(req.params.eventId)
+  const expectedPublicId = normalizeExpectedPoster(req.query.expected_poster)
+  const event = await eventPosterService.removeEventPoster(req.params.eventId, { expectedPublicId })
+  if (!event) throw new AppError('Event not found.', 404)
+  return res.status(200).json({ success: true, data: serializeAdminEvent(event) })
 }
 
 async function listTicketTypes(req, res) {
@@ -77,6 +96,8 @@ module.exports = {
   createEvent,
   updateEvent,
   updateEventStatus,
+  uploadEventPoster,
+  removeEventPoster,
   listTicketTypes,
   createTicketType,
   updateTicketType,

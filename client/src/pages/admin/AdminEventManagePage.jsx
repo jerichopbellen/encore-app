@@ -2,7 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import AdminEventForm from '../../components/admin/AdminEventForm'
 import TicketTypesManager from '../../components/admin/TicketTypesManager'
-import { getAdminEvents, updateAdminEvent, updateAdminEventStatus } from '../../services/adminEventsApi'
+import EventArtwork from '../../components/events/EventArtwork'
+import {
+  getAdminEvents,
+  removeAdminEventPoster,
+  updateAdminEvent,
+  updateAdminEventStatus,
+  uploadAdminEventPoster,
+} from '../../services/adminEventsApi'
 import { formatEventDate } from '../../utils/eventDisplay'
 import useUnsavedChanges from '../../hooks/useUnsavedChanges'
 import useDocumentTitle from '../../hooks/useDocumentTitle'
@@ -19,7 +26,8 @@ function AdminEventManagePage() {
   const [ticketsDirty, setTicketsDirty] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [pendingStatusChange, setPendingStatusChange] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState(location.state?.error || '')
+  const [savingLabel, setSavingLabel] = useState('Saving…')
   const [notice, setNotice] = useState(location.state?.notice || '')
   const submissionLock = useRef(false)
   const updateDetailsDirty = useCallback((dirty) => setDetailsDirty(dirty), [])
@@ -47,18 +55,37 @@ function AdminEventManagePage() {
     return () => { isCurrentRequest = false }
   }, [eventId, retryCount])
 
-  async function handleSaveDetails(draft) {
+  async function handleSaveDetails(draft, posterChange) {
     if (submissionLock.current) return
     submissionLock.current = true
     setErrorMessage('')
     setNotice('')
     setIsSaving(true)
+    setSavingLabel('Saving…')
     try {
-      const updatedEvent = await updateAdminEvent(eventId, draft)
+      let updatedEvent = await updateAdminEvent(eventId, draft)
       setEvent(updatedEvent)
+      if (posterChange) {
+        const isUpload = posterChange.type === 'upload'
+        setSavingLabel(isUpload ? 'Uploading poster…' : 'Removing poster…')
+        try {
+          updatedEvent = isUpload
+            ? await uploadAdminEventPoster(eventId, posterChange.file, posterChange.expectedPublicId)
+            : await removeAdminEventPoster(eventId, posterChange.expectedPublicId)
+        } catch (error) {
+          // Details are saved; the form stays open with the poster change so it can be retried.
+          setErrorMessage(`Event details were saved, but the poster could not be ${isUpload ? 'uploaded' : 'removed'}: ${error.message} Choose Save changes to try again.`)
+          return
+        }
+        setEvent(updatedEvent)
+      }
       setIsEditing(false)
       setDetailsDirty(false)
-      setNotice('Event details saved.')
+      setNotice(posterChange?.type === 'upload'
+        ? 'Event details and custom poster saved.'
+        : posterChange?.type === 'remove'
+          ? 'Event details saved. The default Encore poster has been restored.'
+          : 'Event details saved.')
     } catch (error) {
       setErrorMessage(error.message)
     } finally {
@@ -164,6 +191,7 @@ function AdminEventManagePage() {
             onSubmit={handleSaveDetails}
             onCancel={handleCancelEditing}
             submitLabel="Save changes"
+            savingLabel={savingLabel}
           />
         ) : (
           <dl className="admin-event-details">
@@ -171,6 +199,13 @@ function AdminEventManagePage() {
             <div><dt>Venue</dt><dd>{event.venue}</dd></div>
             <div><dt>Date and time</dt><dd>{formatEventDate(event.starts_at, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</dd></div>
             <div className="admin-event-details__description"><dt>Description</dt><dd>{event.description || 'No description provided.'}</dd></div>
+            <div className="admin-event-details__poster">
+              <dt>Poster</dt>
+              <dd>
+                <EventArtwork event={event} />
+                <span>{event.poster_url ? 'Custom poster' : 'Encore default generated poster'}</span>
+              </dd>
+            </div>
           </dl>
         )}
       </section>

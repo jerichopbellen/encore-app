@@ -20,7 +20,11 @@ async function requestAdminEventsApi(path, options = {}) {
 
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
-    const error = new Error(payload?.message || 'The event management request failed.')
+    // A hosting proxy can reject a large upload before it reaches Encore, without a JSON body.
+    const fallbackMessage = response.status === 413
+      ? 'The upload is too large. Choose a smaller image.'
+      : 'The event management request failed.'
+    const error = new Error(payload?.message || fallbackMessage)
     error.status = response.status
     throw error
   }
@@ -47,6 +51,26 @@ export function updateAdminEventStatus(eventId, status) {
     method: 'PATCH',
     body: JSON.stringify({ status }),
   })
+}
+
+// expected_poster names the poster the admin was looking at ("none" for the
+// default poster), so a stale page cannot replace or remove a newer poster.
+function posterPath(eventId, expectedPosterPublicId) {
+  const query = new URLSearchParams({ expected_poster: expectedPosterPublicId || 'none' })
+  return `/${encodeURIComponent(eventId)}/poster?${query}`
+}
+
+// The image is sent as the raw request body; the API checks its size and content.
+export function uploadAdminEventPoster(eventId, file, expectedPosterPublicId) {
+  return requestAdminEventsApi(posterPath(eventId, expectedPosterPublicId), {
+    method: 'POST',
+    body: file,
+    headers: { 'Content-Type': file.type },
+  })
+}
+
+export function removeAdminEventPoster(eventId, expectedPosterPublicId) {
+  return requestAdminEventsApi(posterPath(eventId, expectedPosterPublicId), { method: 'DELETE' })
 }
 
 export function getAdminTicketTypes(eventId) {

@@ -1,4 +1,5 @@
 const { validatePaymentEnvironment } = require('./payments')
+const { validatePosterEnvironment } = require('./posters')
 
 const DEFAULT_PORT = 5000
 const DATABASE_PROTOCOLS = new Set(['postgres:', 'postgresql:'])
@@ -46,6 +47,8 @@ function validateEnvironment(env = process.env) {
   const port = parsePort(env.PORT)
   // Fails startup on an unknown PAYMENT_PROVIDER or incomplete Stripe test configuration.
   validatePaymentEnvironment(env)
+  // Fails startup on a partial Cloudinary setup or an invalid poster upload limit.
+  validatePosterEnvironment(env)
   const cookieSameSite = String(env.COOKIE_SAME_SITE || 'lax').toLowerCase()
   if (!COOKIE_SAME_SITE_VALUES.has(cookieSameSite)) {
     throw new Error('COOKIE_SAME_SITE must be one of: lax, strict, none.')

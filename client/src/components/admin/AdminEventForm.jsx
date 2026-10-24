@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import EventPosterField from './EventPosterField'
 
 const emptyDraft = { title: '', venue: '', starts_at: '', description: '' }
 
@@ -22,6 +23,17 @@ function isFutureDateTime(value) {
   return Number.isFinite(timestamp) && timestamp > Date.now()
 }
 
+// A stand-in event so the poster preview matches the cards and banner as the admin types.
+function getPreviewEvent(draft, initialEvent) {
+  const startsAt = new Date(draft.starts_at)
+  return {
+    id: initialEvent?.id || 'new-event',
+    title: draft.title.trim() || 'Untitled event',
+    venue: draft.venue.trim() || 'Venue to be announced',
+    starts_at: Number.isFinite(startsAt.getTime()) ? startsAt.toISOString() : new Date().toISOString(),
+  }
+}
+
 function draftsMatch(left, right) {
   return left.title === right.title
     && left.venue === right.venue
@@ -37,12 +49,20 @@ function AdminEventForm({
   onSubmit,
   onCancel,
   submitLabel,
+  savingLabel = 'Saving…',
 }) {
   const [draft, setDraft] = useState(() => getDraft(initialEvent))
   const [dateError, setDateError] = useState('')
   const [originalDraft] = useState(() => getDraft(initialEvent))
+  const [posterChange, setPosterChange] = useState(null)
+  // The poster the admin saw when the form opened. It is sent as the
+  // replace/remove precondition so a newer poster is never overwritten silently.
+  const [originalPoster] = useState(() => ({
+    url: initialEvent?.poster_url || null,
+    publicId: initialEvent?.poster_public_id || null,
+  }))
   const isEditing = Boolean(initialEvent)
-  const isDirty = !draftsMatch(draft, originalDraft)
+  const isDirty = !draftsMatch(draft, originalDraft) || posterChange !== null
   const minDateTime = isEditing && new Date(originalDraft.starts_at) <= new Date()
     ? originalDraft.starts_at
     : toLocalDateTime(new Date())
@@ -86,7 +106,7 @@ function AdminEventForm({
       description: draft.description,
     }
     if (startWasChanged) payload.starts_at = startsAt.toISOString()
-    await onSubmit(payload)
+    await onSubmit(payload, posterChange && { ...posterChange, expectedPublicId: originalPoster.publicId })
   }
 
   return (
@@ -143,9 +163,17 @@ function AdminEventForm({
           />
         </label>
       </div>
+      <EventPosterField
+        previewEvent={getPreviewEvent(draft, initialEvent)}
+        currentPosterUrl={originalPoster.url}
+        change={posterChange}
+        onChange={setPosterChange}
+        disabled={isSaving}
+        isCreating={!isEditing}
+      />
       <div className="admin-event-form__actions">
         <button className="button-link" type="submit" disabled={isSaving}>
-          {isSaving ? 'Saving…' : submitLabel}
+          {isSaving ? savingLabel : submitLabel}
         </button>
         <button className="admin-events__secondary" type="button" onClick={onCancel} disabled={isSaving}>Cancel</button>
       </div>

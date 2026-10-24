@@ -1,5 +1,5 @@
 const DEFAULT_FRONTEND_ORIGIN = 'http://localhost:5173'
-const ALLOWED_METHODS = new Set(['GET', 'HEAD', 'POST', 'PATCH', 'OPTIONS'])
+const ALLOWED_METHODS = new Set(['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'])
 const ALLOWED_HEADERS = new Set(['accept', 'content-type', 'idempotency-key'])
 const ALLOW_HEADERS_VALUE = 'Accept, Content-Type, Idempotency-Key'
 
@@ -31,7 +31,7 @@ function corsMiddleware(req, res, next) {
     return res.status(403).json({ success: false, message: 'This preflight request is not allowed.' })
   }
 
-  res.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PATCH, OPTIONS')
+  res.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PATCH, DELETE, OPTIONS')
   res.set('Access-Control-Allow-Headers', ALLOW_HEADERS_VALUE)
   res.set('Access-Control-Max-Age', '600')
   return res.status(204).end()

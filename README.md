@@ -35,6 +35,7 @@ The long-term goal is to build a complete booking workflow while exploring datab
 - **Prisma ORM 7** — database client and structured data access
 - **`@prisma/adapter-pg`** — PostgreSQL driver adapter for Prisma
 - **dotenv** — environment variable management
+- **Cloudinary Node SDK** — optional server-side storage for admin-uploaded event posters
 
 ### Database
 
@@ -135,6 +136,7 @@ Encore uses PostgreSQL with a relational schema consisting of seven tables.
 | `reservation_items` | Ticket quantities and reserved prices |
 | `bookings` | Confirmed booking records |
 | `idempotency_keys` | Information used to safely retry supported operations |
+| `event_poster_cleanups` | Cloudinary poster assets waiting to be deleted after a replacement, removal, or failed upload |
 
 The schema uses UUID identifiers, foreign keys, unique constraints, database defaults, and check constraints to protect data integrity.
 
@@ -191,6 +193,9 @@ The following variables are optional:
 - `PORT` — backend listener port; defaults to `5000` locally and is supplied by Render in production.
 - `NODE_ENV` — controls secure cookies and production startup validation.
 - `VITE_API_BASE_URL` — optional frontend API base URL.
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` — optional, set together to enable admin poster uploads (server-only).
+- `CLOUDINARY_POSTER_FOLDER` — Cloudinary Media Library folder and public ID prefix for posters; defaults to `encore/event-posters`.
+- `POSTER_UPLOAD_MAX_BYTES` — maximum poster size; defaults to 4 MB (4194304 bytes), at most 10 MB.
 
 The backend defaults to port `5000`, PostgreSQL uses port `5432`, and the Vite frontend typically uses port `5173`.
 
@@ -315,6 +320,8 @@ Checkout requires an `Idempotency-Key` header containing 8–255 ASCII letters, 
 | POST | `/api/admin/events` | Create an event as a draft (administrator only) |
 | PATCH | `/api/admin/events/:eventId` | Update event title, description, venue, or start time (administrator only) |
 | PATCH | `/api/admin/events/:eventId/status` | Publish or return an event to draft (administrator only) |
+| POST | `/api/admin/events/:eventId/poster?expected_poster=<id or none>` | Upload or replace the event's custom poster; the body is the raw JPEG, PNG, or WebP file (administrator only) |
+| DELETE | `/api/admin/events/:eventId/poster?expected_poster=<id or none>` | Remove the custom poster and restore the default generated poster (administrator only) |
 | GET | `/api/admin/events/:eventId/ticket-types` | List ticket types for an event (administrator only) |
 | POST | `/api/admin/events/:eventId/ticket-types` | Create a ticket type (administrator only) |
 | PATCH | `/api/admin/events/:eventId/ticket-types/:ticketTypeId` | Update a ticket type's name, price, or total capacity (administrator only) |
@@ -328,6 +335,8 @@ The admin dashboard is available to administrators at `/admin`; its `GET /api/ad
 Reservation counts include active pending holds (`status = pending` and `expires_at` is later than the snapshot time), `pending_expired` holds (still marked pending but with `expires_at` at or before that time), and rows marked `cancelled`, `expired`, or `confirmed`; `other` and `total` account for other stored statuses and all reservation rows. Confirmed bookings count only rows with `status = confirmed`. The upcoming list contains at most five published events whose start time is at or after the snapshot time, in chronological order. All values are read from one repeatable-read database snapshot. The endpoint does not process expired reservations or change inventory; stored available inventory may therefore remain reduced until an existing reservation workflow handles an expired hold. Ticket type management remains within each event in the admin events page. Dashboard metrics do not include customer identity or revenue.
 
 Ticket inventory uses `available_quantity = total_quantity - committed_quantity`, where committed quantity is the sum of unexpired pending reservation items and items in confirmed bookings. Updating capacity locks the relevant PostgreSQL ticket row before recalculating this value. Reservation creation already takes an atomic conditional update lock on that same row; cancellation and expiry now acquire it before changing reservation status and restoring inventory. This makes those operations serialize around ticket inventory without changing the schema or the saved prices on existing reservation items. Expired pending holds are excluded after the existing expiry process marks them expired.
+
+Event posters are optional. Event responses include `poster_url` (`null` when the event has no custom poster, in which case the frontend draws Encore's generated poster exactly as before); admin responses also include `poster_public_id`. Uploads are sent as the raw request body with an image `Content-Type`, limited by `POSTER_UPLOAD_MAX_BYTES` (HTTP `413` when larger), and checked by their leading bytes: only JPEG, PNG, and WebP are accepted, so SVG and other active content is rejected (HTTP `415`). The API stores the image in Cloudinary under a new public ID, verifies Cloudinary's response, and only then points the event at it inside a transaction that locks the event row. `expected_poster` must name the poster the admin is looking at (`none` for the default); if the event's poster changed in the meantime, the request returns HTTP `409` and changes nothing. The previous asset is deleted from Cloudinary only after that transaction commits; a deletion that fails stays recorded in `event_poster_cleanups` and is retried by later poster changes or by `npm run posters:cleanup`. Poster changes never touch ticket types, inventory, reservations, bookings, or payments. When the Cloudinary variables are not configured, uploads return HTTP `503` and every event keeps its default poster.
 
 Successful implemented API responses generally use a JSON structure with a `success` field and a `data` or `message` field, as appropriate. Placeholder endpoints may return a not-implemented response instead.
 

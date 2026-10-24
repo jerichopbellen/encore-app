@@ -6,6 +6,8 @@ function serializeEvent(event) {
     venue: event.venue,
     starts_at: event.starts_at.toISOString(),
     status: event.status,
+    // null means the event uses Encore's generated default poster.
+    poster_url: event.poster_url ?? null,
     ticket_types: (event.ticket_types || []).map((ticketType) => ({
       id: ticketType.id,
       name: ticketType.name,
@@ -16,4 +18,10 @@ function serializeEvent(event) {
   }
 }
 
-module.exports = { serializeEvent }
+// Admins also receive the poster's public ID, which they send back as the
+// expected_poster precondition when replacing or removing it.
+function serializeAdminEvent(event) {
+  return { ...serializeEvent(event), poster_public_id: event.poster_public_id ?? null }
+}
+
+module.exports = { serializeEvent, serializeAdminEvent }
