@@ -120,7 +120,7 @@ function AdminEventForm({
   return (
     <form className="admin-event-form" onSubmit={handleSubmit}>
       <div className="admin-event-form__main">
-        <section className="admin-event-form__section" aria-labelledby="admin-event-basics">
+        <section className="admin-event-form__section">
           <h2 id="admin-event-basics"><span className="admin-event-form__step" aria-hidden="true">1</span>Basics</h2>
           <div className="admin-event-form__fields">
             <label>
@@ -143,7 +143,7 @@ function AdminEventForm({
             </label>
           </div>
         </section>
-        <section className="admin-event-form__section" aria-labelledby="admin-event-schedule">
+        <section className="admin-event-form__section">
           <h2 id="admin-event-schedule"><span className="admin-event-form__step" aria-hidden="true">2</span>Schedule</h2>
           <div className="admin-event-form__fields">
             <label>
@@ -162,7 +162,7 @@ function AdminEventForm({
             </label>
           </div>
         </section>
-        <section className="admin-event-form__section" aria-labelledby="admin-event-description">
+        <section className="admin-event-form__section">
           <h2 id="admin-event-description"><span className="admin-event-form__step" aria-hidden="true">3</span>Description <small>optional</small></h2>
           <textarea
             className="admin-event-form__description"
@@ -173,7 +173,7 @@ function AdminEventForm({
             rows={5}
           />
         </section>
-        <section className="admin-event-form__section" aria-labelledby="admin-event-poster">
+        <section className="admin-event-form__section">
           <h2 id="admin-event-poster"><span className="admin-event-form__step" aria-hidden="true">4</span>Poster <small>optional</small></h2>
           <EventPosterField
             previewEvent={previewEvent}
