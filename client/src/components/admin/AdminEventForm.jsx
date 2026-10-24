@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import EventPosterField from './EventPosterField'
+import EventArtwork from '../events/EventArtwork'
+import { formatEventDate } from '../../utils/eventDisplay'
 
 const emptyDraft = { title: '', venue: '', starts_at: '', description: '' }
 
@@ -109,74 +111,104 @@ function AdminEventForm({
     await onSubmit(payload, posterChange && { ...posterChange, expectedPublicId: originalPoster.publicId })
   }
 
+  const previewEvent = getPreviewEvent(draft, initialEvent)
+  const previewPosterUrl = posterChange?.type === 'upload'
+    ? posterChange.previewUrl
+    : posterChange?.type === 'remove' ? null : originalPoster.url
+  const hasValidDate = Number.isFinite(new Date(draft.starts_at).getTime())
+
   return (
     <form className="admin-event-form" onSubmit={handleSubmit}>
-      <div className="admin-event-form__heading">
-        <div>
-          <p className="eyebrow">{isEditing ? 'EVENT DETAILS' : 'NEW EVENT'}</p>
-          <h2>{isEditing ? 'Edit event details' : 'Create an event'}</h2>
-        </div>
-        {isEditing
-          ? <span className="admin-event-status">Current event · {initialEvent.status}</span>
-          : <span className="admin-event-status admin-event-status--draft">New events start as drafts</span>}
-      </div>
-      {isDirty && <p className="admin-form__unsaved" role="status">Unsaved changes</p>}
-      {errorMessage && <p className="admin-events__message admin-events__message--error" role="alert">{errorMessage}</p>}
-      <div className="admin-event-form__fields">
-        <label>
-          <span>Event title</span>
-          <input
-            value={draft.title}
-            onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-            maxLength={200}
-            required
-          />
-        </label>
-        <label>
-          <span>Venue</span>
-          <input
-            value={draft.venue}
-            onChange={(event) => setDraft((current) => ({ ...current, venue: event.target.value }))}
-            maxLength={200}
-            required
-          />
-        </label>
-        <label>
-          <span>Date and time</span>
-          <input
-            type="datetime-local"
-            value={draft.starts_at}
-            min={minDateTime}
-            onChange={(event) => handleDateTimeChange(event.target.value)}
-            aria-invalid={Boolean(dateError)}
-            aria-describedby={dateError ? 'admin-event-date-error' : undefined}
-            required
-          />
-          {dateError && <span className="admin-event-form__field-error" id="admin-event-date-error" role="alert">{dateError}</span>}
-        </label>
-        <label className="admin-event-form__description">
-          <span>Description <small>(optional)</small></span>
+      <div className="admin-event-form__main">
+        <section className="admin-event-form__section">
+          <h2 id="admin-event-basics"><span className="admin-event-form__step" aria-hidden="true">1</span>Basics</h2>
+          <div className="admin-event-form__fields">
+            <label>
+              <span>Event title</span>
+              <input
+                value={draft.title}
+                onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                maxLength={200}
+                required
+              />
+            </label>
+            <label>
+              <span>Venue</span>
+              <input
+                value={draft.venue}
+                onChange={(event) => setDraft((current) => ({ ...current, venue: event.target.value }))}
+                maxLength={200}
+                required
+              />
+            </label>
+          </div>
+        </section>
+        <section className="admin-event-form__section">
+          <h2 id="admin-event-schedule"><span className="admin-event-form__step" aria-hidden="true">2</span>Schedule</h2>
+          <div className="admin-event-form__fields">
+            <label>
+              <span>Date and time</span>
+              <input
+                type="datetime-local"
+                value={draft.starts_at}
+                min={minDateTime}
+                onChange={(event) => handleDateTimeChange(event.target.value)}
+                aria-invalid={Boolean(dateError)}
+                aria-describedby={dateError ? 'admin-event-date-error admin-event-date-hint' : 'admin-event-date-hint'}
+                required
+              />
+              <small className="admin-event-form__hint" id="admin-event-date-hint">Uses your device's local time zone.</small>
+              {dateError && <span className="admin-event-form__field-error" id="admin-event-date-error" role="alert">{dateError}</span>}
+            </label>
+          </div>
+        </section>
+        <section className="admin-event-form__section">
+          <h2 id="admin-event-description"><span className="admin-event-form__step" aria-hidden="true">3</span>Description <small>optional</small></h2>
           <textarea
+            className="admin-event-form__description"
             value={draft.description}
             onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
-            rows={4}
+            aria-labelledby="admin-event-description"
+            placeholder="Who's performing, what to expect, and anything guests should know."
+            rows={5}
           />
-        </label>
+        </section>
+        <section className="admin-event-form__section">
+          <h2 id="admin-event-poster"><span className="admin-event-form__step" aria-hidden="true">4</span>Poster <small>optional</small></h2>
+          <EventPosterField
+            previewEvent={previewEvent}
+            currentPosterUrl={originalPoster.url}
+            change={posterChange}
+            onChange={setPosterChange}
+            disabled={isSaving}
+            isCreating={!isEditing}
+          />
+        </section>
       </div>
-      <EventPosterField
-        previewEvent={getPreviewEvent(draft, initialEvent)}
-        currentPosterUrl={originalPoster.url}
-        change={posterChange}
-        onChange={setPosterChange}
-        disabled={isSaving}
-        isCreating={!isEditing}
-      />
-      <div className="admin-event-form__actions">
-        <button className="button-link" type="submit" disabled={isSaving}>
-          {isSaving ? savingLabel : submitLabel}
-        </button>
-        <button className="admin-events__secondary" type="button" onClick={onCancel} disabled={isSaving}>Cancel</button>
-      </div>
+
+      <aside className="admin-event-form__summary" aria-label="Event summary">
+        <p className="eyebrow">PREVIEW</p>
+        <EventArtwork event={previewEvent} posterUrl={previewPosterUrl} />
+        <p className="admin-event-form__summary-title">{previewEvent.title}</p>
+        <p className="admin-event-form__summary-meta">
+          {previewEvent.venue} · {hasValidDate
+            ? formatEventDate(draft.starts_at, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+            : 'Date not set'}
+        </p>
+        <p className="admin-event-form__note">
+          {isEditing
+            ? `Currently ${initialEvent.status === 'published' ? 'published' : 'a draft'}. Change its status from the event workspace.`
+            : 'Saves as a draft. Publish it from the event workspace when it is ready.'}
+        </p>
+        {isDirty && <p className="admin-form__unsaved" role="status">Unsaved changes</p>}
+        {errorMessage && <p className="admin-events__message admin-events__message--error" role="alert">{errorMessage}</p>}
+        <div className="admin-event-form__actions">
+          <button className="button-link" type="submit" disabled={isSaving}>
+            {isSaving ? savingLabel : submitLabel}
+          </button>
+          <button className="admin-events__secondary" type="button" onClick={onCancel} disabled={isSaving}>Cancel</button>
+        </div>
+      </aside>
     </form>
   )
 }

@@ -9,9 +9,12 @@ const ABSOLUTE_MAX_BYTES = 10 * 1024 * 1024
 // Lets an admin stage a poster change. Nothing is uploaded here: the parent form
 // sends the staged change when the event is saved. `change` is null (keep the
 // current poster), { type: 'upload', file, previewUrl }, or { type: 'remove' }.
+// The form's summary shows the Discover card preview; this section shows the
+// wider event-page banner crop.
 function EventPosterField({ previewEvent, currentPosterUrl, change, onChange, disabled, isCreating }) {
   const inputRef = useRef(null)
   const [error, setError] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
   const hasCustomPoster = Boolean(currentPosterUrl)
   const shownPosterUrl = change?.type === 'upload' ? change.previewUrl : change?.type === 'remove' ? null : currentPosterUrl
   const saveWord = isCreating ? 'create the event' : 'save'
@@ -22,10 +25,7 @@ function EventPosterField({ previewEvent, currentPosterUrl, change, onChange, di
     onChange(nextChange)
   }
 
-  function handleFileChange(event) {
-    const [file] = event.target.files
-    // Clear the input so choosing the same file again still triggers a change.
-    event.target.value = ''
+  function acceptFile(file) {
     if (!file) return
     if (!ACCEPTED_TYPES.includes(file.type)) {
       setError('Choose a JPEG, PNG, or WebP image. SVG and other formats are not supported.')
@@ -39,8 +39,28 @@ function EventPosterField({ previewEvent, currentPosterUrl, change, onChange, di
       setError('That image is too large. Choose an image of 4 MB or smaller.')
       return
     }
-    setError('')
     replaceChange({ type: 'upload', file, previewUrl: URL.createObjectURL(file) })
+  }
+
+  function handleFileChange(event) {
+    const [file] = event.target.files
+    // Clear the input so choosing the same file again still triggers a change.
+    event.target.value = ''
+    acceptFile(file)
+  }
+
+  function handleDragOver(event) {
+    if (disabled) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setIsDragging(true)
+  }
+
+  function handleDrop(event) {
+    event.preventDefault()
+    setIsDragging(false)
+    if (disabled) return
+    acceptFile(event.dataTransfer.files?.[0])
   }
 
   let status
@@ -51,31 +71,35 @@ function EventPosterField({ previewEvent, currentPosterUrl, change, onChange, di
 
   return (
     <fieldset className="admin-poster-field" disabled={disabled}>
-      <legend>Event poster <small>(optional)</small></legend>
-      <div className="admin-poster-field__layout">
-        <div className="admin-poster-field__previews">
-          <figure>
-            <EventArtwork event={previewEvent} posterUrl={shownPosterUrl} />
-            <figcaption>Discover card</figcaption>
-          </figure>
-          <figure className="admin-poster-field__banner">
-            <EventArtwork event={previewEvent} posterUrl={shownPosterUrl} variant="detail" />
-            <figcaption>Event page banner</figcaption>
-          </figure>
-        </div>
-        <div className="admin-poster-field__controls">
+      <legend className="admin-poster-field__legend">Event poster</legend>
+      <div
+        className={isDragging ? 'admin-poster-field__dropzone admin-poster-field__dropzone--active' : 'admin-poster-field__dropzone'}
+        onDragOver={handleDragOver}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+      >
+        <p>Drag a JPEG, PNG, or WebP image here, or</p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPTED_TYPES.join(',')}
+          onChange={handleFileChange}
+          hidden
+        />
+        <button className="admin-events__secondary" type="button" onClick={() => inputRef.current?.click()}>
+          {hasCustomPoster || change?.type === 'upload' ? 'Replace image' : 'Choose image'}
+        </button>
+        <small>Up to 4 MB. The image is cropped to fill each layout, so keep key details near the center.</small>
+      </div>
+      {error && <p className="admin-event-form__field-error" role="alert">{error}</p>}
+      <div className="admin-poster-field__current">
+        <figure>
+          <EventArtwork event={previewEvent} posterUrl={shownPosterUrl} variant="detail" />
+          <figcaption>Event page banner</figcaption>
+        </figure>
+        <div>
           <p className="admin-poster-field__status" role="status">{status}</p>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ACCEPTED_TYPES.join(',')}
-            onChange={handleFileChange}
-            hidden
-          />
           <div className="admin-poster-field__actions">
-            <button className="admin-events__secondary" type="button" onClick={() => inputRef.current?.click()}>
-              {hasCustomPoster || change?.type === 'upload' ? 'Replace image' : 'Choose image'}
-            </button>
             {change?.type === 'upload' && (
               <button className="admin-events__secondary" type="button" onClick={() => replaceChange(null)}>Cancel new image</button>
             )}
@@ -88,11 +112,7 @@ function EventPosterField({ previewEvent, currentPosterUrl, change, onChange, di
               <button className="admin-events__secondary" type="button" onClick={() => replaceChange(null)}>Keep custom poster</button>
             )}
           </div>
-          <p className="admin-poster-field__help">
-            JPEG, PNG, or WebP, up to 4 MB. The image is cropped to fill each layout, so keep key details near the center.
-            {hasCustomPoster ? ' Removing the custom poster restores Encore\'s default generated poster.' : ''}
-          </p>
-          {error && <p className="admin-event-form__field-error" role="alert">{error}</p>}
+          {hasCustomPoster && <p className="admin-poster-field__help">Removing the custom poster restores Encore's default generated poster.</p>}
         </div>
       </div>
     </fieldset>

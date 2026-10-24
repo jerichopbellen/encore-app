@@ -2,12 +2,37 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { getAdminEvents, updateAdminEventStatus } from '../../services/adminEventsApi'
 import { formatEventDate } from '../../utils/eventDisplay'
+import EventArtwork from '../../components/events/EventArtwork'
+import AdminEventActionsMenu from '../../components/admin/AdminEventActionsMenu'
+
+const STATUS_FILTERS = [
+  ['all', 'All'],
+  ['published', 'Published'],
+  ['draft', 'Drafts'],
+]
+const SORT_OPTIONS = [
+  ['soonest', 'Soonest first'],
+  ['latest', 'Latest first'],
+  ['title', 'Title A–Z'],
+]
+
+function sortEvents(events, sort) {
+  return [...events].sort((left, right) => {
+    if (sort === 'title') return left.title.localeCompare(right.title)
+    const difference = new Date(left.starts_at) - new Date(right.starts_at)
+    return sort === 'latest' ? -difference : difference
+  })
+}
 
 function AdminEventsPage() {
   const location = useLocation()
   const [events, setEvents] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  // The dashboard's "Review drafts" link opens this page already filtered.
+  const [statusFilter, setStatusFilter] = useState(() => (
+    STATUS_FILTERS.some(([value]) => value === location.state?.status) ? location.state.status : 'all'
+  ))
+  const [sort, setSort] = useState('soonest')
   const [loadState, setLoadState] = useState('loading')
   const [retryCount, setRetryCount] = useState(0)
   const [pendingEventId, setPendingEventId] = useState(null)
@@ -31,12 +56,18 @@ function AdminEventsPage() {
   }, [retryCount])
 
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase()
-  const visibleEvents = events.filter((event) => {
-    const matchesQuery = !normalizedQuery
-      || event.title.toLocaleLowerCase().includes(normalizedQuery)
-      || event.venue.toLocaleLowerCase().includes(normalizedQuery)
-    return matchesQuery && (statusFilter === 'all' || event.status === statusFilter)
-  })
+  const matchingEvents = events.filter((event) => !normalizedQuery
+    || event.title.toLocaleLowerCase().includes(normalizedQuery)
+    || event.venue.toLocaleLowerCase().includes(normalizedQuery))
+  const statusCounts = {
+    all: matchingEvents.length,
+    published: matchingEvents.filter((event) => event.status === 'published').length,
+    draft: matchingEvents.filter((event) => event.status === 'draft').length,
+  }
+  const visibleEvents = sortEvents(
+    matchingEvents.filter((event) => statusFilter === 'all' || event.status === statusFilter),
+    sort,
+  )
   const hasActiveFilters = Boolean(searchQuery.trim()) || statusFilter !== 'all'
 
   async function handleStatusChange(event) {
@@ -47,7 +78,7 @@ function AdminEventsPage() {
     try {
       const updatedEvent = await updateAdminEventStatus(event.id, nextStatus)
       setEvents((current) => current.map((item) => item.id === updatedEvent.id ? updatedEvent : item))
-      setNotice(nextStatus === 'published' ? 'Event published.' : 'Event unpublished and returned to draft.')
+      setNotice(nextStatus === 'published' ? `${event.title} published.` : `${event.title} unpublished and returned to draft.`)
     } catch (error) {
       setErrorMessage(error.message)
     } finally {
@@ -71,107 +102,118 @@ function AdminEventsPage() {
       <header className="admin-events__heading">
         <div>
           <p className="eyebrow">ENCORE ADMIN</p>
-          <h1 id="admin-events-title">Manage events</h1>
-          <p>Find an event to update its details, ticket types, or publication status.</p>
+          <h1 id="admin-events-title">Events</h1>
+          <p>Find an event to update its details, ticket types, poster, or publication status.</p>
         </div>
-        <div className="admin-events__heading-actions">
-          {loadState === 'success' && <span className="admin-events__total">{events.length} total {events.length === 1 ? 'event' : 'events'}</span>}
-          <Link className="button-link" to="/admin/events/new">Create event</Link>
-        </div>
+        <Link className="button-link" to="/admin/events/new">Create event</Link>
       </header>
 
       {errorMessage && loadState !== 'error' && <p className="admin-events__message admin-events__message--error" role="alert">{errorMessage}</p>}
       {notice && <p className="admin-events__message admin-events__message--success" role="status">{notice}</p>}
 
-      <section className="admin-events__workspace" aria-label="Event catalogue management">
-        <div className="admin-events__list-heading">
-          <div>
-            <p className="eyebrow">CATALOGUE</p>
-            <h2>All events</h2>
-          </div>
-          {loadState === 'success' && <span className="admin-events__result-count" aria-live="polite">Showing {visibleEvents.length} of {events.length}</span>}
+      <div className="admin-events__toolbar">
+        <label className="admin-events__search">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search by event or venue"
+            aria-label="Search events by title or venue"
+            aria-controls="admin-event-results"
+          />
+        </label>
+        <div className="admin-events__filters" role="group" aria-label="Filter events by publication status">
+          {STATUS_FILTERS.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={statusFilter === value ? 'admin-events__filter admin-events__filter--active' : 'admin-events__filter'}
+              aria-pressed={statusFilter === value}
+              onClick={() => setStatusFilter(value)}
+            >
+              {label}{loadState === 'success' && <span className="admin-events__filter-count">{statusCounts[value]}</span>}
+            </button>
+          ))}
         </div>
-
-        <div className="admin-events__controls">
-          <label className="admin-events__search">
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search by event or venue"
-              aria-label="Search events by title or venue"
-              aria-controls="admin-event-results"
-            />
-          </label>
-          <div className="admin-events__filters" role="group" aria-label="Filter events by publication status">
-            {[
-              ['all', 'All'],
-              ['published', 'Published'],
-              ['draft', 'Drafts'],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={statusFilter === value ? 'admin-events__filter admin-events__filter--active' : 'admin-events__filter'}
-                aria-pressed={statusFilter === value}
-                onClick={() => setStatusFilter(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <label className="admin-events__sort">
+          <span>Sort</span>
+          <select value={sort} onChange={(event) => setSort(event.target.value)}>
+            {SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+      </div>
+      {loadState === 'success' && events.length > 0 && (
+        <div className="admin-events__result-line">
+          <span aria-live="polite">Showing {visibleEvents.length} of {events.length} {events.length === 1 ? 'event' : 'events'}</span>
           {hasActiveFilters && <button className="admin-events__clear" type="button" onClick={clearFilters}>Clear filters</button>}
         </div>
+      )}
 
-        {loadState === 'loading' && <p className="admin-events-state" role="status">Loading events…</p>}
-        {loadState === 'error' && (
-          <div className="admin-events-state" role="alert">
-            <p>Events could not be loaded. {errorMessage}</p>
-            <button className="button-link" type="button" onClick={retryLoading}>Try again</button>
+      {loadState === 'loading' && <p className="admin-events-state" role="status">Loading events…</p>}
+      {loadState === 'error' && (
+        <div className="admin-events-state" role="alert">
+          <p>Events could not be loaded. {errorMessage}</p>
+          <button className="button-link" type="button" onClick={retryLoading}>Try again</button>
+        </div>
+      )}
+      {loadState === 'success' && events.length === 0 && (
+        <div className="admin-events-state">
+          <h2>No events yet</h2>
+          <p>Create an event to begin preparing the public lineup.</p>
+          <Link className="button-link" to="/admin/events/new">Create an event</Link>
+        </div>
+      )}
+      {loadState === 'success' && events.length > 0 && visibleEvents.length === 0 && (
+        <div className="admin-events-state admin-events-state--filtered">
+          <h3>No events match these filters</h3>
+          <p>Try another search or clear the current filters to see your full event list.</p>
+          <button className="admin-events__secondary" type="button" onClick={clearFilters}>Clear search and filters</button>
+        </div>
+      )}
+      {loadState === 'success' && visibleEvents.length > 0 && (
+        <div className="admin-event-table" id="admin-event-results">
+          <div className="admin-event-row admin-event-row--header" aria-hidden="true">
+            <span />
+            <span>Date</span>
+            <span>Event</span>
+            <span>Status</span>
+            <span>Tickets</span>
+            <span />
           </div>
-        )}
-        {loadState === 'success' && events.length === 0 && (
-          <div className="admin-events-state">
-            <h2>No events yet</h2>
-            <p>Create an event to begin preparing the public lineup.</p>
-            <Link className="button-link" to="/admin/events/new">Create an event</Link>
-          </div>
-        )}
-        {loadState === 'success' && events.length > 0 && visibleEvents.length === 0 && (
-          <div className="admin-events-state admin-events-state--filtered">
-            <h3>No events match these filters</h3>
-            <p>Try another search or clear the current filters to see your full event list.</p>
-            <button className="admin-events__secondary" type="button" onClick={clearFilters}>Clear search and filters</button>
-          </div>
-        )}
-        {loadState === 'success' && visibleEvents.length > 0 && (
-          <div className="admin-event-list" id="admin-event-results" aria-label="Events">
-            {visibleEvents.map((event) => (
-              <article className="admin-event-card" key={event.id}>
-                <div className="admin-event-card__summary">
-                  <div className="admin-event-card__main">
-                    <div className="admin-event-card__topline">
-                      <span className={`admin-event-status admin-event-status--${event.status}`}>{event.status === 'published' ? 'Published' : 'Draft'}</span>
-                      <time dateTime={event.starts_at}>{formatEventDate(event.starts_at, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
-                    </div>
-                    <h3><Link to={`/admin/events/${event.id}`}>{event.title}</Link></h3>
-                    <p className="admin-event-card__venue">{event.venue}</p>
-                    {event.description && <p className="admin-event-card__description">{event.description}</p>}
-                    <p className="admin-event-card__tickets">{event.ticket_types.length} ticket {event.ticket_types.length === 1 ? 'type' : 'types'} configured</p>
+          <ul className="admin-event-rows" aria-label="Events">
+            {visibleEvents.map((event) => {
+              const ticketTypeCount = event.ticket_types.length
+              return (
+                <li className="admin-event-row" key={event.id}>
+                  <Link className="admin-event-row__poster" to={`/admin/events/${event.id}`} tabIndex={-1} aria-hidden="true">
+                    <EventArtwork event={event} />
+                  </Link>
+                  <div className="admin-event-row__date">
+                    <time dateTime={event.starts_at}>{formatEventDate(event.starts_at, { month: 'short', day: '2-digit' })}</time>
+                    <span>{formatEventDate(event.starts_at, { year: 'numeric' })} · {formatEventDate(event.starts_at, { hour: 'numeric', minute: '2-digit' })}</span>
                   </div>
-                  <div className="admin-event-card__actions">
-                    <Link className="admin-event-card__manage" to={`/admin/events/${event.id}`}>Manage event</Link>
-                    {event.status === 'published' && <Link className="admin-event-card__public" to={`/events/${event.id}`}>View public event</Link>}
-                    <button className={`admin-events__secondary admin-event-card__status admin-event-card__status--${event.status}`} type="button" onClick={() => handleStatusChange(event)} disabled={pendingEventId === event.id}>
-                      {pendingEventId === event.id ? 'Saving…' : event.status === 'published' ? 'Unpublish' : 'Publish'}
-                    </button>
+                  <div className="admin-event-row__event">
+                    <h2><Link to={`/admin/events/${event.id}`}>{event.title}</Link></h2>
+                    <p>{event.venue}</p>
                   </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+                  <span className={`admin-event-badge admin-event-badge--${event.status}`}>{event.status === 'published' ? 'Published' : 'Draft'}</span>
+                  <span className={ticketTypeCount === 0 ? 'admin-event-row__tickets admin-event-row__tickets--none' : 'admin-event-row__tickets'}>
+                    {ticketTypeCount === 0 ? 'No tickets yet' : `${ticketTypeCount} ${ticketTypeCount === 1 ? 'type' : 'types'}`}
+                  </span>
+                  <div className="admin-event-row__actions">
+                    <Link className="admin-event-row__manage" to={`/admin/events/${event.id}`} aria-label={`Manage ${event.title}`}>Manage</Link>
+                    <AdminEventActionsMenu
+                      event={event}
+                      isSaving={pendingEventId === event.id}
+                      onStatusChange={handleStatusChange}
+                    />
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
     </section>
   )
 }

@@ -34,7 +34,7 @@ function AdminEventCreatePage() {
             await uploadAdminEventPoster(createdEvent.id, posterChange.file, null)
             notice = 'Event created as a draft with its custom poster.'
           } catch (error) {
-            posterError = `The poster could not be uploaded: ${error.message} The event uses the default poster for now; choose Edit event details to try again.`
+            posterError = `The poster could not be uploaded: ${error.message} The event uses the default poster for now; choose a poster again in the Poster tab to retry.`
           }
         }
         navigate(`/admin/events/${createdEvent.id}`, {
