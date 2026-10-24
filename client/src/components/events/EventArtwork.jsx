@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { formatEventDate } from '../../utils/eventDisplay'
 
 const artworkPalettes = ['ink', 'blue', 'copper', 'moss']
@@ -7,8 +8,28 @@ function getPalette(id) {
   return artworkPalettes[hash % artworkPalettes.length]
 }
 
-function EventArtwork({ event, variant = 'card' }) {
+// Shows the admin-uploaded poster when the event has one (or a local preview
+// URL while an admin is choosing a file). Without one, or if the image fails to
+// load, it renders Encore's generated default poster exactly as before.
+function EventArtwork({ event, variant = 'card', posterUrl = event.poster_url }) {
+  const [failedPosterUrl, setFailedPosterUrl] = useState(null)
   const date = formatEventDate(event.starts_at, { month: 'short', day: 'numeric' })
+
+  if (posterUrl && posterUrl !== failedPosterUrl) {
+    return (
+      <div className={`event-artwork event-artwork--poster event-artwork--${variant}`}>
+        <img
+          className="event-artwork__poster"
+          src={posterUrl}
+          alt={`Event poster for ${event.title}, ${date}`}
+          loading={variant === 'detail' ? 'eager' : 'lazy'}
+          decoding="async"
+          onError={() => setFailedPosterUrl(posterUrl)}
+        />
+      </div>
+    )
+  }
+
   return (
     <div
       className={`event-artwork event-artwork--${getPalette(event.id)} event-artwork--${variant}`}

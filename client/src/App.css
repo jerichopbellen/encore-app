@@ -1036,3 +1036,33 @@ input, select, textarea { accent-color: var(--burnt-orange); }
   .admin-event-workspace__actions > a,
   .admin-event-workspace__actions > button { flex: 0 1 auto; }
 }
+
+/* Admin-uploaded event posters reuse the generated artwork's frame and crop to fill it. */
+.event-artwork--poster, .event-artwork--poster.event-artwork--detail { padding: 0; background: var(--ink); }
+.event-artwork--poster::before, .event-artwork--poster::after { display: none; }
+.event-artwork__poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+
+.admin-poster-field { min-width: 0; margin: 18px 0 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line-strong); }
+.admin-poster-field legend { float: left; width: 100%; margin-bottom: 12px; padding: 0; color: var(--ink); font-size: .85rem; font-weight: 750; }
+.admin-poster-field legend small { color: var(--muted); font-weight: 600; }
+.admin-poster-field__layout { display: grid; clear: both; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.admin-poster-field__previews { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 12px; align-items: start; }
+.admin-poster-field figure { min-width: 0; margin: 0; }
+.admin-poster-field figcaption { margin-top: 6px; color: var(--muted-strong); font-size: .72rem; font-weight: 750; text-transform: uppercase; }
+.admin-poster-field .event-artwork--detail { min-height: 0; aspect-ratio: 16 / 8; padding: 14px; }
+.admin-poster-field .event-artwork--detail .event-artwork__title { max-width: 90%; font-size: clamp(1.3rem, 2.6vw, 2.2rem); }
+.admin-poster-field .event-artwork--detail .event-artwork__date { font-size: .7rem; }
+.admin-poster-field__status { margin: 0 0 12px; color: var(--ink); font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+.admin-poster-field__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-poster-field .admin-poster-field__remove { border-color: var(--danger); color: var(--danger); }
+.admin-poster-field__help { margin: 12px 0 0; color: var(--muted-strong); font-size: .8rem; line-height: 1.5; }
+.admin-poster-field .admin-event-form__field-error { display: block; margin: 8px 0 0; }
+.admin-event-details__poster { grid-column: 1 / -1; }
+.admin-event-details__poster dd { display: flex; align-items: center; gap: 16px; }
+.admin-event-details__poster .event-artwork { width: min(220px, 45%); flex: none; }
+
+@media (max-width: 760px) {
+  .admin-poster-field__layout, .admin-poster-field__previews { grid-template-columns: minmax(0, 1fr); }
+  .admin-event-details__poster dd { align-items: flex-start; flex-direction: column; }
+  .admin-event-details__poster .event-artwork { width: min(260px, 100%); }
+}

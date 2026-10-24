@@ -1,6 +1,7 @@
 const express = require('express')
 const adminController = require('../controllers/adminController')
 const { requireAuthentication, requireAdministrator } = require('../middleware/authMiddleware')
+const { readPosterUpload } = require('../middleware/posterUploadMiddleware')
 
 const router = express.Router()
 
@@ -12,6 +13,8 @@ router.get('/events', adminController.listEvents)
 router.post('/events', adminController.createEvent)
 router.patch('/events/:eventId', adminController.updateEvent)
 router.patch('/events/:eventId/status', adminController.updateEventStatus)
+router.post('/events/:eventId/poster', readPosterUpload, adminController.uploadEventPoster)
+router.delete('/events/:eventId/poster', adminController.removeEventPoster)
 router.get('/events/:eventId/ticket-types', adminController.listTicketTypes)
 router.post('/events/:eventId/ticket-types', adminController.createTicketType)
 router.patch('/events/:eventId/ticket-types/:ticketTypeId', adminController.updateTicketType)

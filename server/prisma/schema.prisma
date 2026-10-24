@@ -35,7 +35,26 @@ model events {
   starts_at    DateTime       @db.Timestamptz(6)
   status       String         @default("draft") @db.VarChar(20)
   created_at   DateTime       @default(now()) @db.Timestamptz(6)
+  // Optional admin-uploaded Cloudinary poster. Both columns are set or both are
+  // null (events_poster_pair_check); null means the generated default poster.
+  poster_public_id String?    @unique @db.VarChar(255)
+  poster_url       String?
   ticket_types ticket_types[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// Durable list of Cloudinary poster assets that may need deleting. A row is written before an upload
+/// (and removed by the transaction that attaches the asset) and whenever an event switches away from a
+/// poster, so a failed or interrupted cleanup can be retried later.
+model event_poster_cleanups {
+  public_id  String   @id @db.VarChar(255)
+  event_id   String   @db.Uuid
+  reason     String   @db.VarChar(20)
+  attempts   Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at])
 }
 
 model idempotency_keys {

@@ -8,6 +8,8 @@ const publicEventFields = {
   venue: true,
   starts_at: true,
   status: true,
+  poster_public_id: true,
+  poster_url: true,
   ticket_types: {
     select: {
       id: true,
@@ -105,6 +107,7 @@ async function updateEventStatus(id, status) {
 }
 
 module.exports = {
+  publicEventFields,
   listPublishedEvents,
   getPublishedEventById,
   listAdminEvents,
