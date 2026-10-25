@@ -96,7 +96,7 @@ test('a signed-in customer cannot reserve tickets for a past event', async ({ pa
   await expect(page.getByRole('heading', { name: 'Past Event Admission' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Reserve tickets' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Reserve tickets' })).toHaveCount(0)
-  await expect(page.getByRole('combobox', { name: /^Ticket type/ })).toHaveCount(0)
+  await expect(page.getByRole('radio')).toHaveCount(0)
 
   // The server must refuse the hold even when the browser sends it directly
   // with the customer's session cookie and the app's own origin.
@@ -173,12 +173,9 @@ test('a customer can reserve tickets, complete simulated checkout, and view the 
   await login(page, email, customerPassword)
   await page.goto(`/events/${eventId}`)
   await expect(page.getByRole('heading', { name: reservationEventTitle })).toBeVisible()
-  const ticketTypeSelect = page.getByRole('combobox', { name: /^Ticket type/ })
-  const generalAdmissionOption = ticketTypeSelect.locator('option').filter({
-    hasText: /^General Admission$/,
-  })
-  await expect(generalAdmissionOption).toHaveCount(1)
-  await ticketTypeSelect.selectOption({ label: 'General Admission' })
+  const generalAdmission = page.getByRole('group', { name: 'Ticket type' }).getByRole('radio', { name: 'General Admission', exact: true })
+  await expect(generalAdmission).toHaveCount(1)
+  await generalAdmission.check()
   await page.getByLabel('Quantity').fill('2')
   await page.getByRole('button', { name: 'Reserve tickets' }).click()
   await expect(page.getByRole('status')).toContainText('Tickets reserved')

@@ -43,9 +43,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* Shared type hierarchy. Georgia is available locally and keeps the app dependency-free. */
 h1, h2, h3, h4, h5, p { margin-top: 0; }
-h1, h2, .catalogue__intro h1, .event-details__content h1, .auth-page h1,
-.account-page__heading h1, .checkout-page__heading h1, .booking-confirmation h1,
-.admin-dashboard__heading h1, .admin-events__heading h1 {
+h1, h2, .catalogue__intro h1, .auth-page h1, .account-page__heading h1, .checkout-page__heading h1, .booking-confirmation h1, .admin-dashboard__heading h1, .admin-events__heading h1 {
   font-family: Georgia, 'Times New Roman', serif;
   font-weight: 400;
   letter-spacing: -.035em;
@@ -174,22 +172,9 @@ input:not([type=checkbox]):focus, select:focus, textarea:focus { border-color: v
 .event-details { width: min(100%, var(--content-width)); margin: 0 auto; }
 .event-details__back { display: inline-block; margin: 0 0 18px; color: var(--muted-strong); font-size: .86rem; text-decoration: none; }
 .event-details__back:hover { color: var(--warm-white); }
-.event-details__content { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); align-items: start; gap: clamp(28px, 6vw, 72px); padding: 35px 0 38px; }
-.event-details__content .eyebrow { margin-bottom: 12px; }
-.event-details__content h1, .event-not-found h1 { margin: 0 0 13px; color: var(--warm-white); font-size: clamp(2.5rem, 6vw, 4.6rem); line-height: 1; overflow-wrap: anywhere; }
-.event-details__date, .event-details__description, .event-not-found > p:not(.eyebrow) { color: var(--muted-strong); line-height: 1.65; }
+.event-not-found h1 { margin: 0 0 13px; color: var(--warm-white); font-size: clamp(2.5rem, 6vw, 4.6rem); line-height: 1; overflow-wrap: anywhere; }
+.event-details__description, .event-not-found > p:not(.eyebrow) { color: var(--muted-strong); line-height: 1.65; }
 .event-details__description { max-width: 720px; margin: 19px 0 0; }
-.event-details__price { align-self: start; padding: 17px 0; border-block: 1px solid var(--line); }
-.event-details__price p:nth-child(2) { margin: 8px 0; color: var(--muted); }
-.event-details__price strong { color: var(--warm-white); font-size: 1.35rem; }
-.event-details__price span { color: var(--muted); font-size: .78rem; }
-.event-ticket-types { margin: 0 0 28px; }
-.event-ticket-types h2 { margin: 0 0 13px; color: var(--warm-white); font-size: 1.8rem; }
-.event-ticket-list { display: grid; margin: 0; padding: 0; list-style: none; }
-.event-ticket { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 0; border-top: 1px solid var(--line); }
-.event-ticket h3 { margin: 0 0 5px; color: var(--ivory); font-size: .98rem; font-weight: 600; }
-.event-ticket p { margin: 0; color: var(--muted); font-size: .84rem; }
-.event-ticket strong { color: var(--warm-white); white-space: nowrap; }
 .event-not-found { padding: 72px 0; }
 .event-not-found .button-link { margin-top: 7px; }
 .reservation-panel { margin-top: 26px; padding: clamp(20px, 3vw, 30px) 0; border-block: 1px solid var(--line-strong); background: transparent; }
@@ -197,17 +182,12 @@ input:not([type=checkbox]):focus, select:focus, textarea:focus { border-color: v
 .reservation-panel__heading .eyebrow { margin-bottom: 7px; }
 .reservation-panel__heading h2 { margin: 0; color: var(--warm-white); font-size: clamp(1.5rem, 3vw, 2rem); }
 .reservation-panel__hold { color: var(--muted); font-size: .82rem; white-space: nowrap; }
-.reservation-panel__content { min-height: 80px; padding: 22px 0; }
 .reservation-panel__message { margin: 0; color: var(--muted); line-height: 1.6; }
 .reservation-panel__signed-out { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 .reservation-panel__signed-out p { margin: 0; color: var(--muted-strong); }
 .reservation-form { display: grid; gap: 17px; margin: 0; }
-.reservation-form__fields { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(130px, .7fr); gap: 15px; }
-.reservation-form__field, .auth-form label, .admin-event-form__fields label, .admin-ticket-form__fields label { display: grid; min-width: 0; gap: 7px; color: var(--muted-strong); font-size: .85rem; font-weight: 550; }
-.reservation-form__field select, .reservation-form__field input, .auth-form input, .admin-event-form input, .admin-event-form textarea, .admin-ticket-form input { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line-strong); background: var(--ink-soft); color: var(--warm-white); color-scheme: dark; font-weight: 400; }
-.reservation-selection { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: .84rem; }
-.reservation-selection__name { color: var(--ivory); font-weight: 600; }
-.reservation-form__actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 14px; }
+.auth-form label, .admin-event-form__fields label, .admin-ticket-form__fields label { display: grid; min-width: 0; gap: 7px; color: var(--muted-strong); font-size: .85rem; font-weight: 550; }
+.auth-form input, .admin-event-form input, .admin-event-form textarea, .admin-ticket-form input { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line-strong); background: var(--ink-soft); color: var(--warm-white); color-scheme: dark; font-weight: 400; }
 .reservation-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); color: var(--muted-strong); }
 .reservation-summary strong { color: var(--warm-white); font-size: 1.3rem; white-space: nowrap; }
 .reservation-form__submit { min-width: 190px; }
@@ -457,8 +437,6 @@ input:not([type=checkbox]):focus, select:focus, textarea:focus { border-color: v
   .catalogue__intro h1 { font-size: clamp(3.5rem, 15vw, 6rem); }
   .catalogue__hero-copy { max-width: 540px; }
   .event-grid { gap: 26px 18px; }
-  .event-details__content { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 26px 0; }
-  .event-details__price { width: 100%; }
   .account-page__layout { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .account-sidebar { position: static; }
   .account-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
@@ -495,7 +473,6 @@ input:not([type=checkbox]):focus, select:focus, textarea:focus { border-color: v
   .event-artwork--detail .event-artwork__title { max-width: 90%; font-size: clamp(2rem, 10vw, 3.2rem); }
   .catalogue-pagination { align-items: flex-start; flex-direction: column; }
   .catalogue-pagination__controls { width: 100%; justify-content: space-between; }
-  .reservation-form__fields, .reservation-form__actions { grid-template-columns: minmax(0, 1fr); }
   .reservation-form__submit, .checkout-submit { width: 100%; }
   .reservation-panel__heading { align-items: flex-start; }
   .reservation-panel__signed-out { align-items: stretch; }
@@ -530,7 +507,7 @@ input:not([type=checkbox]):focus, select:focus, textarea:focus { border-color: v
 body, .app { background: var(--cream); color: var(--ink); }
 html { scroll-padding-top: calc(var(--navbar-height) + 20px); }
 .app__content { padding-top: clamp(28px, 4vw, 54px); }
-h1, h2, h3, h4, h5, .catalogue__intro h1, .event-details__content h1, .event-not-found h1, .auth-page h1, .account-page__heading h1, .checkout-page__heading h1, .booking-confirmation h1, .admin-dashboard__heading h1, .admin-events__heading h1, .event-card h2, .admin-event-workspace__identity h1, .admin-event-page__heading h1, .admin-event-not-found h1 {
+h1, h2, h3, h4, h5, .catalogue__intro h1, .event-not-found h1, .auth-page h1, .account-page__heading h1, .checkout-page__heading h1, .booking-confirmation h1, .admin-dashboard__heading h1, .admin-events__heading h1, .event-card h2, .admin-event-workspace__identity h1, .admin-event-page__heading h1, .admin-event-not-found h1 {
   font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', 'Arial Black', sans-serif;
   font-weight: 800;
   letter-spacing: -.035em;
@@ -719,9 +696,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 input:not([type=checkbox]), select, textarea { border-radius: 0; }
 input:not([type=checkbox]):focus, select:focus, textarea:focus { border-color: var(--burnt-orange); box-shadow: 0 0 0 1px var(--burnt-orange); }
 input, select, textarea { accent-color: var(--burnt-orange); }
-.reservation-form__field, .auth-form label, .admin-event-form__fields label, .admin-ticket-form__fields label { color: var(--ink); font-weight: 750; }
-.reservation-form__field select, .reservation-form__field input, .auth-form input,
-.admin-event-form input, .admin-event-form textarea, .admin-ticket-form input {
+.auth-form label, .admin-event-form__fields label, .admin-ticket-form__fields label { color: var(--ink); font-weight: 750; }
+.auth-form input, .admin-event-form input, .admin-event-form textarea, .admin-ticket-form input {
   border: 1px solid #83776a; border-radius: 0; background: var(--warm-white); color: var(--ink); color-scheme: light;
 }
 .button-link:focus-visible, .navbar a:focus-visible, .navbar button:focus-visible { outline-color: var(--festival-orange); }
@@ -729,17 +705,8 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 /* Event pages keep the poster loud and purchasing details straightforward. */
 .event-details__back { color: var(--muted-strong); font-weight: 750; text-decoration: underline; text-underline-offset: 4px; }
 .event-details__back:hover { color: var(--burnt-orange); }
-.event-details__content { padding-block: clamp(26px, 4vw, 48px); }
-.event-details__content h1, .event-not-found h1 { color: var(--ink); font-size: clamp(3rem, 7vw, 6rem); font-weight: 900; line-height: .9; text-transform: uppercase; }
-.event-details__content .eyebrow { color: var(--burnt-orange); }
-.event-details__date, .event-details__description, .event-not-found > p:not(.eyebrow) { color: var(--muted-strong); }
-.event-details__price { padding: 19px; border: 0; background: var(--festival-orange); color: var(--ink); }
-.event-details__price .eyebrow, .event-details__price strong, .event-details__price p:nth-child(2), .event-details__price span { color: var(--ink); }
-.event-details__price strong { font-size: 1.5rem; }
-.event-ticket-types h2 { color: var(--ink); font-family: inherit; font-size: clamp(2rem, 4vw, 3rem); font-weight: 900; text-transform: uppercase; }
-.event-ticket { border-color: var(--line-strong); }
-.event-ticket h3, .event-ticket strong { color: var(--ink); }
-.event-ticket p { color: var(--muted-strong); }
+.event-not-found h1 { color: var(--ink); font-size: clamp(3rem, 7vw, 6rem); font-weight: 900; line-height: .9; text-transform: uppercase; }
+.event-details__description, .event-not-found > p:not(.eyebrow) { color: var(--muted-strong); }
 .reservation-panel { padding: clamp(22px, 4vw, 38px); border: 0; background: var(--ink); color: var(--warm-white); }
 .event-started-notice { margin-top: 26px; padding: clamp(22px, 4vw, 38px); border-left: 8px solid var(--burnt-orange); background: var(--cream); color: var(--ink); }
 .event-started-notice .eyebrow { margin: 0 0 9px; color: var(--burnt-orange); font-size: .75rem; font-weight: 850; letter-spacing: .12em; }
@@ -748,10 +715,9 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 .reservation-panel h2, .reservation-panel__success-title { color: var(--warm-white); }
 .reservation-panel .eyebrow { color: var(--festival-orange); }
 .reservation-panel__heading { border-color: #5a534a; }
-.reservation-panel__hold, .reservation-panel__message, .reservation-panel__signed-out p,
-.reservation-selection, .reservation-panel__success, .reservation-panel__expiry, .reservation-panel__note { color: #e3d8c8; }
+.reservation-panel__hold, .reservation-panel__message, .reservation-panel__signed-out p, .reservation-panel__success, .reservation-panel__expiry, .reservation-panel__note { color: #e3d8c8; }
 .reservation-summary { border-color: #5a534a; color: #e3d8c8; }
-.reservation-summary strong, .reservation-selection__name { color: var(--warm-white); }
+.reservation-summary strong { color: var(--warm-white); }
 .reservation-panel__error, .checkout-error { border-color: rgba(255, 179, 160, .45); color: #ffb3a0; }
 .reservation-panel__note { border-color: #5a534a; }
 .reservation-panel__note strong, .reservation-panel__note-mark { color: var(--festival-orange); }
@@ -919,7 +885,7 @@ input, select, textarea { accent-color: var(--burnt-orange); }
   .event-grid { grid-template-columns: minmax(0, 1fr); gap: 26px; }
   .event-artwork { aspect-ratio: 4 / 2.8; }
   .event-artwork__title { max-width: 92%; font-size: clamp(2.2rem, 11vw, 3.7rem); }
-  .event-details__content h1, .event-not-found h1 { font-size: clamp(2.8rem, 13vw, 4.5rem); }
+  .event-not-found h1 { font-size: clamp(2.8rem, 13vw, 4.5rem); }
   .auth-page { padding: 24px 20px; }
   .reservation-card, .booking-list-card, .booking-card, .checkout-card { padding: 17px; }
   .reservation-panel__heading { align-items: flex-start; }
@@ -938,9 +904,15 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 .admin-poster-field { min-width: 0; margin: 18px 0 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line-strong); }
 .admin-poster-field figure { min-width: 0; margin: 0; }
 .admin-poster-field figcaption { margin-top: 6px; color: var(--muted-strong); font-size: .72rem; font-weight: 750; text-transform: uppercase; }
-.admin-poster-field .event-artwork--detail { min-height: 0; aspect-ratio: 16 / 8; padding: 10px 12px; }
-.admin-poster-field .event-artwork--detail .event-artwork__title { max-width: 90%; padding: 4px 0; font-size: clamp(.95rem, 1.7vw, 1.5rem); }
-.admin-poster-field .event-artwork--detail .event-artwork__date { font-size: .6rem; }
+/* A small copy of the event page hero: the poster at 4:3 beside the orange title block. */
+.admin-poster-field__hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); background: var(--festival-orange); outline: 1px solid var(--line-strong); }
+.admin-poster-field__hero .event-artwork--hero { height: auto; aspect-ratio: 4 / 3; padding: 8px 10px; }
+.admin-poster-field__hero .event-artwork--hero .event-artwork__title { max-width: 90%; padding: 4px 0; font-size: clamp(.85rem, 1.4vw, 1.25rem); }
+.admin-poster-field__hero .event-artwork--hero .event-artwork__kicker { padding: 2px 4px; font-size: .5rem; }
+.admin-poster-field__hero .event-artwork--hero .event-artwork__date { font-size: .55rem; }
+.admin-poster-field__hero-info { display: flex; min-width: 0; flex-direction: column; justify-content: center; gap: 4px; padding: 8px 10px; }
+.admin-poster-field__hero-venue { color: #41382f; font-size: .55rem; font-weight: 850; letter-spacing: .08em; overflow-wrap: anywhere; text-transform: uppercase; }
+.admin-poster-field__hero-title { color: var(--ink); font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; font-size: clamp(.95rem, 1.6vw, 1.35rem); line-height: .9; overflow-wrap: anywhere; text-transform: uppercase; }
 .admin-poster-field__status { margin: 0 0 12px; color: var(--ink); font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
 .admin-poster-field__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .admin-poster-field .admin-poster-field__remove { border-color: var(--danger); color: var(--danger); }
@@ -1025,7 +997,7 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 .admin-event-form__hint { color: var(--muted-strong); font-size: .76rem; font-weight: 500; }
 .admin-event-form .admin-event-form__description { width: 100%; min-height: 120px; }
 .admin-event-form__summary { position: sticky; top: calc(var(--navbar-height) + 18px); display: grid; min-width: 0; gap: 10px; padding: clamp(16px, 2vw, 22px); border-top: 5px solid var(--ink); background: var(--warm-white); }
-.admin-event-form__summary .event-artwork, .admin-poster-field__current .event-artwork { outline: 1px solid var(--line-strong); }
+.admin-event-form__summary .event-artwork { outline: 1px solid var(--line-strong); }
 .admin-event-form__summary .eyebrow, .admin-event-form__summary .admin-form__unsaved, .admin-event-form__summary .admin-events__message { margin: 0; }
 .admin-event-form__summary-title { margin: 4px 0 0; color: var(--ink); font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; font-size: 1.5rem; line-height: 1; text-transform: uppercase; overflow-wrap: anywhere; }
 .admin-event-form__summary-meta { margin: 0; color: var(--muted-strong); font-size: .84rem; line-height: 1.45; overflow-wrap: anywhere; }
@@ -1128,4 +1100,93 @@ input, select, textarea { accent-color: var(--burnt-orange); }
   .admin-event-overview__figures, .admin-poster-panel { grid-template-columns: minmax(0, 1fr); }
   .admin-event-check { grid-template-columns: 30px minmax(0, 1fr); }
   .admin-event-check__action { grid-column: 2; }
+}
+
+/* Event page: poster hero, info cards, and a booking panel that stays in view. */
+.event-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); background: var(--festival-orange); }
+.event-hero .event-artwork--hero { height: 100%; min-height: 0; aspect-ratio: 4 / 3; padding: clamp(18px, 3vw, 36px); }
+.event-artwork--hero .event-artwork__title { max-width: 90%; font-size: clamp(2.2rem, 4.6vw, 4.8rem); }
+.event-artwork--hero .event-artwork__date { font-size: .85rem; }
+.event-hero__info { display: flex; min-width: 0; flex-direction: column; justify-content: space-between; gap: 22px; padding: clamp(20px, 3.4vw, 40px); color: var(--ink); }
+.event-hero__venue { margin: 0 0 10px; color: #41382f; font-size: .78rem; font-weight: 850; letter-spacing: .1em; overflow-wrap: anywhere; text-transform: uppercase; }
+.event-hero h1 { margin: 0; color: var(--ink); font-size: clamp(2.6rem, 5.4vw, 5.2rem); font-weight: 900; line-height: .88; overflow-wrap: anywhere; text-transform: uppercase; }
+.event-hero__facts { display: grid; gap: 6px; color: #41382f; font-size: .95rem; line-height: 1.4; }
+.event-hero__facts time { color: var(--ink); font-weight: 800; }
+.event-hero__cta { display: flex; min-height: 48px; align-items: center; justify-content: center; gap: 10px; background: var(--ink); color: var(--warm-white); font-size: .88rem; font-weight: 850; letter-spacing: .04em; text-decoration: none; text-transform: uppercase; }
+.event-hero__cta:hover { background: var(--burnt-orange); }
+.event-hero__closed { align-self: flex-start; padding: 6px 10px; border-left: 4px solid var(--ink); background: rgba(40, 37, 34, .12); color: var(--ink); font-size: .8rem; font-weight: 850; text-transform: uppercase; }
+.event-details__body { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr); gap: clamp(18px, 3vw, 32px); align-items: start; margin-top: clamp(18px, 3vw, 32px); }
+.event-details__main { display: grid; min-width: 0; gap: clamp(14px, 2vw, 20px); }
+.event-info-card, .event-price-list { padding: clamp(18px, 2.6vw, 28px); border-top: 5px solid var(--ink); background: var(--warm-white); }
+.event-info-card .eyebrow { margin: 0 0 6px; color: var(--burnt-orange); }
+.event-info-card h2 { margin: 0 0 12px; color: var(--ink); font-size: clamp(1.5rem, 2.4vw, 2rem); text-transform: uppercase; }
+.event-info-card .event-details__description { max-width: 68ch; margin: 0; color: var(--muted-strong); line-height: 1.7; }
+.event-facts { display: grid; margin: 0; }
+.event-facts > div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+.event-facts dt { color: var(--muted); font-size: .76rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.event-facts dd { margin: 0; color: var(--ink); line-height: 1.5; overflow-wrap: anywhere; }
+.event-details__booking { display: grid; min-width: 0; gap: 14px; scroll-margin-top: calc(var(--navbar-height) + 18px); }
+.event-details__booking .event-started-notice { margin: 0; background: var(--warm-white); }
+.event-price-list h2 { margin: 0 0 8px; color: var(--ink); font-size: 1.4rem; text-transform: uppercase; }
+.event-price-list ul { margin: 0; padding: 0; list-style: none; }
+.event-price-list li { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 0; border-top: 1px solid var(--line); }
+.event-price-list h3 { margin: 0 0 3px; color: var(--ink); font-size: 1rem; text-transform: uppercase; overflow-wrap: anywhere; }
+.event-price-list p { margin: 0; color: var(--muted-strong); font-size: .8rem; }
+.event-price-list strong { color: var(--ink); white-space: nowrap; }
+
+.reservation-panel { margin: 0; padding: clamp(18px, 2.6vw, 26px); border: 0; border-top: 7px solid var(--festival-orange); background: var(--warm-white); color: var(--ink); }
+.reservation-panel h2, .reservation-panel__success-title { color: var(--ink); }
+.reservation-panel .eyebrow { margin-bottom: 5px; color: var(--burnt-orange); }
+.reservation-panel__heading { align-items: flex-end; padding-bottom: 14px; border-color: var(--line-strong); }
+.reservation-panel__heading h2 { font-size: clamp(1.5rem, 2.4vw, 1.9rem); text-transform: uppercase; }
+.reservation-panel__hold { padding: 3px 8px; background: #f7dfb0; color: #8b5a12; font-size: .72rem; font-weight: 850; text-transform: uppercase; }
+.reservation-panel__message, .reservation-panel__signed-out p, .reservation-panel__expiry, .reservation-panel__note { color: var(--muted-strong); }
+.reservation-panel > .reservation-panel__message, .reservation-panel > .reservation-panel__success { margin: 16px 0 0; }
+.reservation-form { gap: 14px; margin-top: 16px; }
+.reservation-tickets { display: grid; min-width: 0; gap: 8px; margin: 0; padding: 0; border: 0; }
+.reservation-tickets legend, .reservation-form__quantity > label { margin-bottom: 8px; padding: 0; color: var(--ink); font-size: .76rem; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+.reservation-ticket { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line-strong); background: #fff; cursor: pointer; transition: border-color .15s ease, background-color .15s ease; }
+.reservation-ticket:hover { border-color: var(--ink); }
+.reservation-ticket input { width: 18px; height: 18px; margin: 0; accent-color: var(--burnt-orange); }
+.reservation-ticket:has(input:focus-visible) { outline: 3px solid var(--burnt-orange); outline-offset: 2px; }
+.reservation-ticket--selected, .reservation-ticket--selected:hover { border-color: var(--burnt-orange); background: #fff3dc; box-shadow: inset 0 0 0 1px var(--burnt-orange); }
+.reservation-ticket--sold-out, .reservation-ticket--sold-out:hover { border-color: var(--line-strong); cursor: not-allowed; opacity: .55; }
+.reservation-ticket__text { display: grid; min-width: 0; gap: 3px; }
+.reservation-ticket__name { color: var(--ink); font-weight: 800; overflow-wrap: anywhere; }
+.reservation-ticket__stock { color: var(--muted-strong); font-size: .78rem; }
+.reservation-ticket__stock--low { color: #8b5a12; font-weight: 750; }
+.reservation-ticket--sold-out .reservation-ticket__stock { color: var(--danger); }
+.reservation-ticket__price { color: var(--ink); font-size: 1rem; white-space: nowrap; }
+.reservation-form__quantity { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 6px 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.reservation-form__quantity > label { margin: 0; }
+.reservation-stepper { display: inline-flex; border: 1px solid var(--ink); background: #fff; }
+.reservation-stepper button { width: 40px; min-height: 42px; border: 0; background: transparent; color: var(--ink); font-size: 1.15rem; font-weight: 800; cursor: pointer; }
+.reservation-stepper button:hover:not(:disabled) { background: var(--ink); color: var(--warm-white); }
+.reservation-stepper input { width: 56px; min-height: 42px; padding: 0 4px; border: 0; border-inline: 1px solid var(--ink); background: #fff; color: var(--ink); font-weight: 800; text-align: center; appearance: textfield; }
+.reservation-stepper input::-webkit-outer-spin-button, .reservation-stepper input::-webkit-inner-spin-button { margin: 0; appearance: none; }
+.reservation-summary { justify-content: flex-end; gap: 10px; padding: 0; border: 0; color: var(--muted-strong); }
+.reservation-summary strong { color: var(--ink); font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; font-size: 1.6rem; }
+.reservation-form .reservation-form__submit { width: 100%; min-width: 0; min-height: 50px; }
+.reservation-panel__signed-out { display: grid; gap: 8px; }
+.reservation-panel__signed-out p { margin: 0; font-size: .82rem; text-align: center; }
+.reservation-panel__error { border-color: rgba(163, 51, 34, .35); color: var(--danger); }
+.reservation-panel__success { padding: 14px; border-left: 5px solid var(--success); background: #e7f1e8; color: var(--ink); }
+.reservation-panel__success-mark { color: var(--success); }
+.reservation-panel__next { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 10px; }
+.reservation-panel__success a:not(.button-link) { color: var(--burnt-orange); font-weight: 800; }
+.reservation-panel__success .button-link { color: var(--warm-white); }
+.reservation-panel__note { margin-top: 16px; border-color: var(--line); font-size: .8rem; }
+.reservation-panel__note strong, .reservation-panel__note-mark { color: var(--ink); }
+
+/* Only pin the booking column when the screen is tall enough to show all of it. */
+@media (min-width: 901px) and (min-height: 760px) {
+  .event-details__booking { position: sticky; top: calc(var(--navbar-height) + 18px); }
+}
+@media (max-width: 900px) {
+  .event-hero, .event-details__body { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .reservation-form__quantity { grid-template-columns: auto minmax(0, 1fr); }
+  .reservation-summary { grid-column: 1 / -1; justify-content: space-between; }
+  .event-facts > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }

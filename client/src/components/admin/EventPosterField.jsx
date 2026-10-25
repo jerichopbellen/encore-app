@@ -10,7 +10,7 @@ const ABSOLUTE_MAX_BYTES = 10 * 1024 * 1024
 // sends the staged change when the event is saved. `change` is null (keep the
 // current poster), { type: 'upload', file, previewUrl }, or { type: 'remove' }.
 // The form's summary shows the Discover card preview; this section shows the
-// wider event-page banner crop.
+// poster as the event page's hero presents it, beside the orange title block.
 function EventPosterField({ previewEvent, currentPosterUrl, change, onChange, disabled, isCreating }) {
   const inputRef = useRef(null)
   const [error, setError] = useState('')
@@ -89,13 +89,19 @@ function EventPosterField({ previewEvent, currentPosterUrl, change, onChange, di
         <button className="admin-events__secondary" type="button" onClick={() => inputRef.current?.click()}>
           {hasCustomPoster || change?.type === 'upload' ? 'Replace image' : 'Choose image'}
         </button>
-        <small>Up to 4 MB. The image is cropped to fill each layout, so keep key details near the center.</small>
+        <small>Up to 4 MB. Discover cards and the event page both show it at 4:3, so keep key details near the center.</small>
       </div>
       {error && <p className="admin-event-form__field-error" role="alert">{error}</p>}
       <div className="admin-poster-field__current">
         <figure>
-          <EventArtwork event={previewEvent} posterUrl={shownPosterUrl} variant="detail" />
-          <figcaption>Event page banner</figcaption>
+          <div className="admin-poster-field__hero" aria-hidden="true">
+            <EventArtwork event={previewEvent} posterUrl={shownPosterUrl} variant="hero" />
+            <div className="admin-poster-field__hero-info">
+              <span className="admin-poster-field__hero-venue">{previewEvent.venue}</span>
+              <span className="admin-poster-field__hero-title">{previewEvent.title}</span>
+            </div>
+          </div>
+          <figcaption>Event page</figcaption>
         </figure>
         <div>
           <p className="admin-poster-field__status" role="status">{status}</p>
