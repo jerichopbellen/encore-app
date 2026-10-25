@@ -96,51 +96,79 @@ function EventDetails() {
   })
   const hasStarted = startedEventId === id
   const startingPrice = getStartingPrice(event.ticket_types)
+  const ticketTypeCount = event.ticket_types.length
 
   return (
     <article className="event-details">
       <Link className="event-details__back" to="/">← All events</Link>
-      <EventArtwork event={event} variant="detail" />
-      <div className="event-details__content">
-        <div>
-          <p className="eyebrow">{event.venue}</p>
-          <h1>{event.title}</h1>
-          <p className="event-details__date">{eventDate}</p>
-          {event.description
-            ? <p className="event-details__description">{event.description}</p>
-            : <p className="event-details__description">No description provided.</p>}
+
+      <header className="event-hero">
+        <EventArtwork event={event} variant="hero" />
+        <div className="event-hero__info">
+          <div>
+            <p className="event-hero__venue">{event.venue}</p>
+            <h1>{event.title}</h1>
+          </div>
+          <div className="event-hero__facts">
+            <time dateTime={event.starts_at}>{eventDate}</time>
+            <span>
+              {startingPrice === null
+                ? 'Ticket types are not listed yet'
+                : `From ${formatPrice(startingPrice)} · ${ticketTypeCount} ticket ${ticketTypeCount === 1 ? 'type' : 'types'}`}
+            </span>
+          </div>
+          {hasStarted
+            ? <span className="event-hero__closed">Reservations closed</span>
+            : ticketTypeCount > 0 && <a className="event-hero__cta" href="#event-booking">Get tickets <span aria-hidden="true">↓</span></a>}
         </div>
-        <aside className="event-details__price">
-          <p className="eyebrow">TICKETS</p>
-          {startingPrice === null
-            ? <p>Ticket types are not listed yet.</p>
-            : <p>From <strong>{formatPrice(startingPrice)}</strong></p>}
-          <span>Prices shown in Philippine pesos</span>
-        </aside>
+      </header>
+
+      <div className="event-details__body">
+        <div className="event-details__main">
+          <section className="event-info-card" aria-labelledby="event-about-title">
+            <p className="eyebrow">ABOUT</p>
+            <h2 id="event-about-title">The event</h2>
+            <p className="event-details__description">{event.description || 'No description provided.'}</p>
+          </section>
+          <section className="event-info-card" aria-labelledby="event-facts-title">
+            <p className="eyebrow">DETAILS</p>
+            <h2 id="event-facts-title">Good to know</h2>
+            <dl className="event-facts">
+              <div><dt>When</dt><dd><time dateTime={event.starts_at}>{eventDate}</time></dd></div>
+              <div><dt>Where</dt><dd>{event.venue}</dd></div>
+              <div><dt>Tickets</dt><dd>Prices are in Philippine pesos. Reserved tickets are held for 15 minutes while you check out.</dd></div>
+            </dl>
+          </section>
+        </div>
+
+        <div className="event-details__booking" id="event-booking">
+          {hasStarted ? (
+            <>
+              <section className="event-started-notice" role="status" aria-labelledby="event-started-title">
+                <p className="eyebrow">EVENT STARTED</p>
+                <h2 id="event-started-title">Reservations are closed</h2>
+                <p>This event has already started. You can still view its details and ticket information.</p>
+              </section>
+              {ticketTypeCount > 0 && (
+                <section className="event-price-list" aria-labelledby="event-price-list-title">
+                  <h2 id="event-price-list-title">Ticket prices</h2>
+                  <ul>
+                    {event.ticket_types.map((ticketType) => (
+                      <li key={ticketType.id}>
+                        <div>
+                          <h3>{ticketType.name}</h3>
+                          <p>{ticketType.available_quantity} of {ticketType.total_quantity} available</p>
+                        </div>
+                        <strong>{formatPrice(ticketType.price)}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </>
+          ) : <EventReservationPanel key={event.id} event={event} />}
+        </div>
       </div>
-      <section className="event-ticket-types" aria-label="Ticket types">
-        <h2>Ticket options</h2>
-        {event.ticket_types.length === 0
-          ? <p className="event-page-state">No ticket types are listed for this event yet.</p>
-          : <ul className="event-ticket-list">
-            {event.ticket_types.map((ticketType) => (
-              <li className="event-ticket" key={ticketType.id}>
-                <div>
-                  <h3>{ticketType.name}</h3>
-                  <p>{ticketType.available_quantity} of {ticketType.total_quantity} available</p>
-                </div>
-                <strong>{formatPrice(ticketType.price)}</strong>
-              </li>
-            ))}
-          </ul>}
-      </section>
-      {hasStarted ? (
-        <section className="event-started-notice" role="status" aria-labelledby="event-started-title">
-          <p className="eyebrow">EVENT STARTED</p>
-          <h2 id="event-started-title">Reservations are closed</h2>
-          <p>This event has already started. You can still view its details and ticket information.</p>
-        </section>
-      ) : <EventReservationPanel key={event.id} event={event} />}
     </article>
   )
 }
