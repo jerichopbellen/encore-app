@@ -1106,7 +1106,9 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 .event-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); background: var(--festival-orange); }
 .event-hero .event-artwork--hero { height: 100%; min-height: 0; aspect-ratio: 4 / 3; padding: clamp(18px, 3vw, 36px); }
 .event-artwork--hero .event-artwork__title { max-width: 90%; font-size: clamp(2.2rem, 4.6vw, 4.8rem); }
-.event-artwork--hero .event-artwork__date { font-size: .85rem; }
+.event-artwork--hero .event-artwork__date { padding-top: 10px; border-top: 2px solid color-mix(in srgb, currentColor 38%, transparent); font-size: .85rem; }
+/* The hero's padding differs from cards, so a fixed-position rule would cross the date; draw it on the date instead. */
+.event-artwork--hero::after { display: none; }
 .event-hero__info { display: flex; min-width: 0; flex-direction: column; justify-content: space-between; gap: 22px; padding: clamp(20px, 3.4vw, 40px); color: var(--ink); }
 .event-hero__venue { margin: 0 0 10px; color: #41382f; font-size: .78rem; font-weight: 850; letter-spacing: .1em; overflow-wrap: anywhere; text-transform: uppercase; }
 .event-hero h1 { margin: 0; color: var(--ink); font-size: clamp(2.6rem, 5.4vw, 5.2rem); font-weight: 900; line-height: .88; overflow-wrap: anywhere; text-transform: uppercase; }
@@ -1115,6 +1117,14 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 .event-hero__cta { display: flex; min-height: 48px; align-items: center; justify-content: center; gap: 10px; background: var(--ink); color: var(--warm-white); font-size: .88rem; font-weight: 850; letter-spacing: .04em; text-decoration: none; text-transform: uppercase; }
 .event-hero__cta:hover { background: var(--burnt-orange); }
 .event-hero__closed { align-self: flex-start; padding: 6px 10px; border-left: 4px solid var(--ink); background: rgba(40, 37, 34, .12); color: var(--ink); font-size: .8rem; font-weight: 850; text-transform: uppercase; }
+/* The orange default poster would blend into the orange info panel, so flip the panel to ink. */
+.event-hero:has(.event-artwork--copper) .event-hero__info { background: var(--ink); color: var(--warm-white); }
+.event-hero:has(.event-artwork--copper) .event-hero__venue { color: var(--festival-orange); }
+.event-hero:has(.event-artwork--copper) h1, .event-hero:has(.event-artwork--copper) .event-hero__facts time { color: var(--warm-white); }
+.event-hero:has(.event-artwork--copper) .event-hero__facts { color: #d9cfbf; }
+.event-hero:has(.event-artwork--copper) .event-hero__cta { background: var(--festival-orange); color: var(--ink); }
+.event-hero:has(.event-artwork--copper) .event-hero__cta:hover { background: var(--warm-white); }
+.event-hero:has(.event-artwork--copper) .event-hero__closed { border-left-color: var(--festival-orange); background: rgba(250, 248, 242, .12); color: var(--warm-white); }
 .event-details__body { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr); gap: clamp(18px, 3vw, 32px); align-items: start; margin-top: clamp(18px, 3vw, 32px); }
 .event-details__main { display: grid; min-width: 0; gap: clamp(14px, 2vw, 20px); }
 .event-info-card, .event-price-list { padding: clamp(18px, 2.6vw, 28px); border-top: 5px solid var(--ink); background: var(--warm-white); }
