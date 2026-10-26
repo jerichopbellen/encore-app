@@ -651,9 +651,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .event-artwork {
   aspect-ratio: 4 / 3; justify-content: space-between; padding: clamp(13px, 1.5vw, 20px);
   background: var(--festival-orange); color: var(--ink); transition: filter .18s ease;
+  container-type: inline-size;
 }
 .event-artwork::before { top: 0; right: auto; bottom: auto; left: 0; width: 100%; height: 8px; border: 0; border-radius: 0; background: var(--ink); }
-.event-artwork::after { right: 14px; bottom: 46px; left: 14px; height: 2px; background: currentColor; opacity: .38; }
+/* The divider is drawn on the date (below) so it moves with wrapped text; only text-free thumbnails keep this fixed line. */
+.event-artwork::after { display: none; right: 14px; bottom: 46px; left: 14px; height: 2px; background: currentColor; opacity: .38; }
 .event-artwork--ink { background: var(--ink); color: var(--warm-white); }
 .event-artwork--ink::before { background: var(--festival-orange); }
 .event-artwork--blue { background: var(--warm-white); color: var(--ink); }
@@ -667,8 +669,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .event-artwork--moss .event-artwork__title { max-width: 88%; }
 .event-artwork__kicker { position: relative; z-index: 1; width: fit-content; padding: 4px 7px; background: var(--ink); color: var(--warm-white); font-size: .68rem; font-weight: 900; letter-spacing: .06em; }
 .event-artwork__kicker span { color: var(--festival-orange); }
-.event-artwork__title { display: block; position: relative; z-index: 1; max-width: 94%; margin: auto 0; padding: 22px 0 12px; color: inherit; font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', 'Arial Black', sans-serif; font-size: clamp(1.55rem, 3.1vw, 3.25rem); font-weight: 900; letter-spacing: -.045em; line-height: .9; overflow-wrap: anywhere; text-transform: uppercase; text-wrap: balance; }
-.event-artwork__date { position: relative; z-index: 1; max-width: 88%; color: inherit; font-size: .7rem; font-weight: 750; line-height: 1.35; text-transform: uppercase; }
+.event-artwork__title { display: block; position: relative; z-index: 1; max-width: 94%; margin: auto 0; padding: 22px 0 12px; color: inherit; font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', 'Arial Black', sans-serif; font-size: clamp(1.55rem, 13cqi, 3.25rem); font-weight: 900; letter-spacing: -.045em; line-height: .9; overflow-wrap: anywhere; text-transform: uppercase; text-wrap: balance; }
+/* Size titles from the artwork's own width and cap them at three lines so the date always stays visible. */
+/* The bottom gap is a transparent border, not padding, so a clamped fourth line can't peek into it. */
+.event-artwork__title { display: -webkit-box; overflow: hidden; padding-bottom: 0; border-bottom: 12px solid transparent; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; }
+.event-artwork__date { position: relative; z-index: 1; max-width: 88%; padding-top: 10px; border-top: 2px solid color-mix(in srgb, currentColor 38%, transparent); color: inherit; font-size: .7rem; font-weight: 750; line-height: 1.35; text-transform: uppercase; }
 .event-artwork--detail { min-height: clamp(340px, 43vw, 560px); aspect-ratio: 16 / 8; padding: clamp(22px, 4vw, 48px); }
 .event-artwork--detail .event-artwork__title { max-width: 86%; font-size: clamp(3rem, 8vw, 8rem); }
 .event-artwork--detail .event-artwork__date { max-width: 60%; font-size: .9rem; }
@@ -862,7 +867,7 @@ input, select, textarea { accent-color: var(--burnt-orange); }
   .catalogue__heading { min-height: 138px; align-items: start; flex-direction: column; justify-content: end; gap: 12px; }
   .catalogue__heading h2 { font-size: clamp(2.8rem, 12vw, 4.8rem); }
   .event-artwork { aspect-ratio: 4 / 3; }
-  .event-artwork__title { font-size: clamp(1.8rem, 7vw, 3rem); }
+  .event-artwork__title { font-size: clamp(1.8rem, 13cqi, 3rem); }
   .event-artwork--detail { min-height: 330px; aspect-ratio: auto; }
   .event-artwork--detail .event-artwork__title { max-width: 94%; font-size: clamp(3rem, 13vw, 5.5rem); }
   .event-artwork--detail .event-artwork__date { max-width: 85%; }
@@ -884,7 +889,7 @@ input, select, textarea { accent-color: var(--burnt-orange); }
   .catalogue__heading > span { padding-left: 10px; }
   .event-grid { grid-template-columns: minmax(0, 1fr); gap: 26px; }
   .event-artwork { aspect-ratio: 4 / 2.8; }
-  .event-artwork__title { max-width: 92%; font-size: clamp(2.2rem, 11vw, 3.7rem); }
+  .event-artwork__title { max-width: 92%; font-size: clamp(2.2rem, 13cqi, 3.7rem); }
   .event-not-found h1 { font-size: clamp(2.8rem, 13vw, 4.5rem); }
   .auth-page { padding: 24px 20px; }
   .reservation-card, .booking-list-card, .booking-card, .checkout-card { padding: 17px; }
@@ -907,12 +912,18 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 /* A small copy of the event page hero: the poster at 4:3 beside the orange title block. */
 .admin-poster-field__hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); background: var(--festival-orange); outline: 1px solid var(--line-strong); }
 .admin-poster-field__hero .event-artwork--hero { height: auto; aspect-ratio: 4 / 3; padding: 8px 10px; }
-.admin-poster-field__hero .event-artwork--hero .event-artwork__title { max-width: 90%; padding: 4px 0; font-size: clamp(.85rem, 1.4vw, 1.25rem); }
+/* The moss poster's 12px bottom bar is taller than this small padding, so lift the date clear of it. */
+.admin-poster-field__hero .event-artwork--moss.event-artwork--hero { padding-bottom: 18px; }
+.admin-poster-field__hero .event-artwork--hero .event-artwork__title { max-width: 90%; padding: 4px 0 0; border-bottom-width: 4px; font-size: clamp(.85rem, 1.4vw, 1.25rem); }
 .admin-poster-field__hero .event-artwork--hero .event-artwork__kicker { padding: 2px 4px; font-size: .5rem; }
 .admin-poster-field__hero .event-artwork--hero .event-artwork__date { font-size: .55rem; }
 .admin-poster-field__hero-info { display: flex; min-width: 0; flex-direction: column; justify-content: center; gap: 4px; padding: 8px 10px; }
 .admin-poster-field__hero-venue { color: #41382f; font-size: .55rem; font-weight: 850; letter-spacing: .08em; overflow-wrap: anywhere; text-transform: uppercase; }
 .admin-poster-field__hero-title { color: var(--ink); font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; font-size: clamp(.95rem, 1.6vw, 1.35rem); line-height: .9; overflow-wrap: anywhere; text-transform: uppercase; }
+/* Mirror the event page: an orange default poster gets an ink title block. */
+.admin-poster-field__hero:has(.event-artwork--copper) .admin-poster-field__hero-info { background: var(--ink); }
+.admin-poster-field__hero:has(.event-artwork--copper) .admin-poster-field__hero-venue { color: var(--festival-orange); }
+.admin-poster-field__hero:has(.event-artwork--copper) .admin-poster-field__hero-title { color: var(--warm-white); }
 .admin-poster-field__status { margin: 0 0 12px; color: var(--ink); font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
 .admin-poster-field__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .admin-poster-field .admin-poster-field__remove { border-color: var(--danger); color: var(--danger); }
@@ -964,6 +975,8 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 .admin-event-row__poster { display: block; min-width: 0; }
 .admin-event-row__poster .event-artwork { aspect-ratio: 4 / 3; padding: 0; }
 .admin-event-row__poster .event-artwork > span { display: none; }
+.admin-event-row__poster .event-artwork:not(.event-artwork--poster)::after,
+.admin-event-workspace__poster .event-artwork:not(.event-artwork--poster)::after { display: block; }
 .admin-event-row__date time { display: block; color: var(--ink); font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; font-size: 1.35rem; line-height: 1; text-transform: uppercase; }
 .admin-event-row__date span { display: block; margin-top: 4px; color: var(--muted-strong); font-size: .74rem; }
 .admin-event-row__event { min-width: 0; }
@@ -1106,9 +1119,7 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 .event-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); background: var(--festival-orange); }
 .event-hero .event-artwork--hero { height: 100%; min-height: 0; aspect-ratio: 4 / 3; padding: clamp(18px, 3vw, 36px); }
 .event-artwork--hero .event-artwork__title { max-width: 90%; font-size: clamp(2.2rem, 4.6vw, 4.8rem); }
-.event-artwork--hero .event-artwork__date { padding-top: 10px; border-top: 2px solid color-mix(in srgb, currentColor 38%, transparent); font-size: .85rem; }
-/* The hero's padding differs from cards, so a fixed-position rule would cross the date; draw it on the date instead. */
-.event-artwork--hero::after { display: none; }
+.event-artwork--hero .event-artwork__date { font-size: .85rem; }
 .event-hero__info { display: flex; min-width: 0; flex-direction: column; justify-content: space-between; gap: 22px; padding: clamp(20px, 3.4vw, 40px); color: var(--ink); }
 .event-hero__venue { margin: 0 0 10px; color: #41382f; font-size: .78rem; font-weight: 850; letter-spacing: .1em; overflow-wrap: anywhere; text-transform: uppercase; }
 .event-hero h1 { margin: 0; color: var(--ink); font-size: clamp(2.6rem, 5.4vw, 5.2rem); font-weight: 900; line-height: .88; overflow-wrap: anywhere; text-transform: uppercase; }
