@@ -8,14 +8,18 @@ function sumGroupCounts(groups) {
   return groups.reduce((total, group) => total + group._count._all, 0)
 }
 
-function buildDashboardOverview({ eventGroups, inventory, reservationGroups, expiredPendingCount, confirmedBookingCount, upcomingEvents }) {
+function buildDashboardOverview({ eventGroups, upcomingEventCount, inventory, reservationGroups, expiredPendingCount, confirmedBookingCount, upcomingEvents }) {
+  const totalEventCount = sumGroupCounts(eventGroups)
   const storedPendingCount = countForStatus(reservationGroups, 'pending')
 
   return {
     event_counts: {
-      total: sumGroupCounts(eventGroups),
+      total: totalEventCount,
       published: countForStatus(eventGroups, 'published'),
       draft: countForStatus(eventGroups, 'draft'),
+      // Events have only a start time, so every event not yet started is upcoming and the rest are past.
+      upcoming: upcomingEventCount,
+      past: Math.max(0, totalEventCount - upcomingEventCount),
     },
     ticket_inventory: {
       ticket_type_count: inventory._count._all,
@@ -50,8 +54,9 @@ async function getDashboardOverview() {
   // RepeatableRead gives all dashboard cards one consistent database snapshot.
   // This is deliberately read-only: expired holds are reported, not processed here.
   return prisma.$transaction(async (tx) => {
-    const [eventGroups, inventory, reservationGroups, expiredPendingCount, confirmedBookingCount, upcomingEvents] = await Promise.all([
+    const [eventGroups, upcomingEventCount, inventory, reservationGroups, expiredPendingCount, confirmedBookingCount, upcomingEvents] = await Promise.all([
       tx.events.groupBy({ by: ['status'], _count: { _all: true } }),
+      tx.events.count({ where: { starts_at: { gt: now } } }),
       tx.ticket_types.aggregate({
         _count: { _all: true },
         _sum: { total_quantity: true, available_quantity: true },
@@ -69,6 +74,7 @@ async function getDashboardOverview() {
 
     return buildDashboardOverview({
       eventGroups,
+      upcomingEventCount,
       inventory,
       reservationGroups,
       expiredPendingCount,

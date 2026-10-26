@@ -366,7 +366,7 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
 
       const emptyDashboard = await request('/api/admin/dashboard', { cookie: fixture.account.cookie })
       assert.equal(emptyDashboard.response.status, 200)
-      assert.deepEqual(emptyDashboard.payload.data.event_counts, { total: 0, published: 0, draft: 0 })
+      assert.deepEqual(emptyDashboard.payload.data.event_counts, { total: 0, published: 0, draft: 0, upcoming: 0, past: 0 })
       assert.deepEqual(emptyDashboard.payload.data.ticket_inventory, {
         ticket_type_count: 0, total_capacity: 0, available_quantity: 0,
       })
@@ -661,7 +661,9 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         })
         const dashboardResult = await request('/api/admin/dashboard', { cookie: fixture.account.cookie })
         assert.equal(dashboardResult.response.status, 200)
-        assert.deepEqual(dashboardResult.payload.data.event_counts, { total: 2, published: 1, draft: 1 })
+        assert.deepEqual(dashboardResult.payload.data.event_counts, {
+          total: 2, published: 1, draft: 1, upcoming: 1, past: 1,
+        }, 'The past-dated draft counts as past and the new published event as upcoming')
         assert.deepEqual(dashboardResult.payload.data.ticket_inventory, {
           ticket_type_count: 2, total_capacity: 4, available_quantity: 2,
         })
