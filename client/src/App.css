@@ -979,6 +979,9 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 .admin-event-workspace__poster .event-artwork:not(.event-artwork--poster)::after { display: block; }
 .admin-event-row__date time { display: block; color: var(--ink); font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; font-size: 1.35rem; line-height: 1; text-transform: uppercase; }
 .admin-event-row__date span { display: block; margin-top: 4px; color: var(--muted-strong); font-size: .74rem; }
+.admin-event-row__date .admin-event-timing { display: inline-block; margin-top: 6px; padding: 1px 6px; font-size: .64rem; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+.admin-event-row__date .admin-event-timing--upcoming { background: var(--ink); color: var(--warm-white); }
+.admin-event-row__date .admin-event-timing--past { border: 1px solid var(--line-strong); color: var(--muted-strong); }
 .admin-event-row__event { min-width: 0; }
 .admin-event-row__event h2 { margin: 0 0 3px; font-size: clamp(1.1rem, 1.6vw, 1.4rem); line-height: 1.05; text-transform: uppercase; overflow-wrap: anywhere; }
 .admin-event-row__event h2 a { color: var(--ink); text-decoration: none; }

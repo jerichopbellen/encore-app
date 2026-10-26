@@ -97,7 +97,7 @@ function AdminDashboardPage() {
         <div className="admin-dashboard__figure">
           <dt>Events</dt>
           <dd className="admin-dashboard__figure-value">{events.total.toLocaleString()}</dd>
-          <dd>{events.published.toLocaleString()} published · {events.draft.toLocaleString()} {events.draft === 1 ? 'draft' : 'drafts'}</dd>
+          <dd>{events.upcoming.toLocaleString()} upcoming · {events.past.toLocaleString()} past</dd>
         </div>
         <div className="admin-dashboard__figure">
           <dt>Tickets left</dt>

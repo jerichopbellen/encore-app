@@ -10,6 +10,7 @@ const emptyInventory = {
 test('dashboard metrics return zero values when the database has no records', () => {
   const dashboard = buildDashboardOverview({
     eventGroups: [],
+    upcomingEventCount: 0,
     inventory: emptyInventory,
     reservationGroups: [],
     expiredPendingCount: 0,
@@ -18,7 +19,7 @@ test('dashboard metrics return zero values when the database has no records', ()
   })
 
   assert.deepEqual(dashboard, {
-    event_counts: { total: 0, published: 0, draft: 0 },
+    event_counts: { total: 0, published: 0, draft: 0, upcoming: 0, past: 0 },
     ticket_inventory: { ticket_type_count: 0, total_capacity: 0, available_quantity: 0 },
     reservation_counts: {
       pending: 0, cancelled: 0, expired: 0, confirmed: 0,
@@ -36,6 +37,7 @@ test('dashboard metrics separate active holds from expired holds awaiting proces
       { status: 'published', _count: { _all: 2 } },
       { status: 'draft', _count: { _all: 1 } },
     ],
+    upcomingEventCount: 2,
     inventory: { _count: { _all: 3 }, _sum: { total_quantity: 20, available_quantity: 12 } },
     reservationGroups: [
       { status: 'pending', _count: { _all: 3 } },
@@ -49,7 +51,7 @@ test('dashboard metrics separate active holds from expired holds awaiting proces
     upcomingEvents: [{ id: 'event-id', title: 'Show', venue: 'Hall', starts_at: start }],
   })
 
-  assert.deepEqual(dashboard.event_counts, { total: 3, published: 2, draft: 1 })
+  assert.deepEqual(dashboard.event_counts, { total: 3, published: 2, draft: 1, upcoming: 2, past: 1 })
   assert.deepEqual(dashboard.ticket_inventory, { ticket_type_count: 3, total_capacity: 20, available_quantity: 12 })
   assert.deepEqual(dashboard.reservation_counts, {
     pending: 2, cancelled: 1, expired: 2, confirmed: 4,

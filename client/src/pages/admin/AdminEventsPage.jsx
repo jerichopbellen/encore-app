@@ -10,6 +10,12 @@ const STATUS_FILTERS = [
   ['published', 'Published'],
   ['draft', 'Drafts'],
 ]
+// Events have only a start time, so an event is past once that time has passed.
+const TIMING_FILTERS = [
+  ['any', 'Any time'],
+  ['upcoming', 'Upcoming'],
+  ['past', 'Past'],
+]
 const SORT_OPTIONS = [
   ['soonest', 'Soonest first'],
   ['latest', 'Latest first'],
@@ -24,6 +30,10 @@ function sortEvents(events, sort) {
   })
 }
 
+function getEventTiming(event, now) {
+  return new Date(event.starts_at) > now ? 'upcoming' : 'past'
+}
+
 function AdminEventsPage() {
   const location = useLocation()
   const [events, setEvents] = useState([])
@@ -32,6 +42,7 @@ function AdminEventsPage() {
   const [statusFilter, setStatusFilter] = useState(() => (
     STATUS_FILTERS.some(([value]) => value === location.state?.status) ? location.state.status : 'all'
   ))
+  const [timingFilter, setTimingFilter] = useState('any')
   const [sort, setSort] = useState('soonest')
   const [loadState, setLoadState] = useState('loading')
   const [retryCount, setRetryCount] = useState(0)
@@ -55,6 +66,7 @@ function AdminEventsPage() {
     return () => { isCurrentRequest = false }
   }, [retryCount])
 
+  const now = new Date()
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase()
   const matchingEvents = events.filter((event) => !normalizedQuery
     || event.title.toLocaleLowerCase().includes(normalizedQuery)
@@ -64,11 +76,17 @@ function AdminEventsPage() {
     published: matchingEvents.filter((event) => event.status === 'published').length,
     draft: matchingEvents.filter((event) => event.status === 'draft').length,
   }
+  const timingCounts = {
+    any: matchingEvents.length,
+    upcoming: matchingEvents.filter((event) => getEventTiming(event, now) === 'upcoming').length,
+    past: matchingEvents.filter((event) => getEventTiming(event, now) === 'past').length,
+  }
   const visibleEvents = sortEvents(
-    matchingEvents.filter((event) => statusFilter === 'all' || event.status === statusFilter),
+    matchingEvents.filter((event) => (statusFilter === 'all' || event.status === statusFilter)
+      && (timingFilter === 'any' || getEventTiming(event, now) === timingFilter)),
     sort,
   )
-  const hasActiveFilters = Boolean(searchQuery.trim()) || statusFilter !== 'all'
+  const hasActiveFilters = Boolean(searchQuery.trim()) || statusFilter !== 'all' || timingFilter !== 'any'
 
   async function handleStatusChange(event) {
     const nextStatus = event.status === 'published' ? 'draft' : 'published'
@@ -95,6 +113,7 @@ function AdminEventsPage() {
   function clearFilters() {
     setSearchQuery('')
     setStatusFilter('all')
+    setTimingFilter('any')
   }
 
   return (
@@ -105,7 +124,10 @@ function AdminEventsPage() {
           <h1 id="admin-events-title">Events</h1>
           <p>Find an event to update its details, ticket types, poster, or publication status.</p>
         </div>
-        <Link className="button-link" to="/admin/events/new">Create event</Link>
+        <div className="admin-dashboard__actions">
+          <Link className="admin-events__secondary" to="/admin">Dashboard</Link>
+          <Link className="button-link" to="/admin/events/new">Create event</Link>
+        </div>
       </header>
 
       {errorMessage && loadState !== 'error' && <p className="admin-events__message admin-events__message--error" role="alert">{errorMessage}</p>}
@@ -132,6 +154,19 @@ function AdminEventsPage() {
               onClick={() => setStatusFilter(value)}
             >
               {label}{loadState === 'success' && <span className="admin-events__filter-count">{statusCounts[value]}</span>}
+            </button>
+          ))}
+        </div>
+        <div className="admin-events__filters" role="group" aria-label="Filter events by upcoming or past">
+          {TIMING_FILTERS.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={timingFilter === value ? 'admin-events__filter admin-events__filter--active' : 'admin-events__filter'}
+              aria-pressed={timingFilter === value}
+              onClick={() => setTimingFilter(value)}
+            >
+              {label}{loadState === 'success' && <span className="admin-events__filter-count">{timingCounts[value]}</span>}
             </button>
           ))}
         </div>
@@ -183,6 +218,7 @@ function AdminEventsPage() {
           <ul className="admin-event-rows" aria-label="Events">
             {visibleEvents.map((event) => {
               const ticketTypeCount = event.ticket_types.length
+              const timing = getEventTiming(event, now)
               return (
                 <li className="admin-event-row" key={event.id}>
                   <Link className="admin-event-row__poster" to={`/admin/events/${event.id}`} tabIndex={-1} aria-hidden="true">
@@ -191,6 +227,7 @@ function AdminEventsPage() {
                   <div className="admin-event-row__date">
                     <time dateTime={event.starts_at}>{formatEventDate(event.starts_at, { month: 'short', day: '2-digit' })}</time>
                     <span>{formatEventDate(event.starts_at, { year: 'numeric' })} · {formatEventDate(event.starts_at, { hour: 'numeric', minute: '2-digit' })}</span>
+                    <span className={`admin-event-timing admin-event-timing--${timing}`}>{timing === 'upcoming' ? 'Upcoming' : 'Past'}</span>
                   </div>
                   <div className="admin-event-row__event">
                     <h2><Link to={`/admin/events/${event.id}`}>{event.title}</Link></h2>
