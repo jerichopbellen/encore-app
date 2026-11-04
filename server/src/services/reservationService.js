@@ -4,6 +4,7 @@ const { lockTicketTypes } = require('./inventoryService')
 
 const RESERVATION_HOLD_MINUTES = 15
 const EXPIRY_BATCH_SIZE = 100
+const MAX_PENDING_RESERVATIONS_PER_USER = 2
 
 const reservationInclude = {
   reservation_items: {
@@ -146,6 +147,25 @@ async function createReservation(userId, { event_id, ticket_type_id, quantity })
     })
     if (!ticketType) throw new AppError('That ticket type is not available for this event.', 400)
 
+    // Serialize this account's reservation attempts so concurrent requests cannot
+    // all pass the pending-hold count below. NO KEY UPDATE does not block the
+    // foreign-key checks other workflows make against the user row, and no
+    // workflow takes ticket, event or reservation locks and then waits for it,
+    // so taking it before the inventory locks cannot create a lock cycle.
+    await tx.$queryRaw`/* encore-reservation-user-lock */
+      SELECT id FROM users WHERE id = ${userId}::uuid FOR NO KEY UPDATE`
+    // Holds that already expired by time no longer count, even before the sweep
+    // marks them. Confirmed and cancelled reservations never count.
+    const pendingCount = await tx.reservations.count({
+      where: { user_id: userId, status: 'pending', expires_at: { gt: now } },
+    })
+    if (pendingCount >= MAX_PENDING_RESERVATIONS_PER_USER) {
+      throw new AppError(
+        `You can hold at most ${MAX_PENDING_RESERVATIONS_PER_USER} pending reservations at a time. Complete, cancel or let one expire before reserving more tickets.`,
+        409,
+      )
+    }
+
     // Lock inventory first, then the event row. If either lock waited, the
     // following statement gets a fresh view of the event and tests its start
     // time using PostgreSQL's wall clock at the inventory write.
@@ -276,6 +296,7 @@ async function cancelReservation(userId, reservationId) {
 }
 
 module.exports = {
+  MAX_PENDING_RESERVATIONS_PER_USER,
   createReservation,
   listReservations,
   getReservationForUser,

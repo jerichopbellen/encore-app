@@ -39,6 +39,43 @@ function describeDatabaseTarget(value, variableName) {
   return { hostname: url.hostname, port: url.port || '5432', databaseName }
 }
 
+// Every table the Prisma schema defines; fixtures must find all of them empty.
+const APP_TABLES = [
+  'users',
+  'events',
+  'ticket_types',
+  'reservations',
+  'reservation_items',
+  'bookings',
+  'idempotency_keys',
+  'payment_attempts',
+  'stripe_webhook_events',
+  'event_poster_cleanups',
+]
+const EXPECTED_TABLES = [...APP_TABLES, '_prisma_migrations']
+
+// Run IDs may contain hyphens, so a hyphen after the run ID cannot mark its end: the
+// prefix for run "local" would also match run "local-m2-1". A "." can never appear
+// in a run ID, so it bounds the ID exactly. Event titles end the ID with a space.
+function customerEmailPrefix(runId) {
+  return `encore-e2e-${runId}.`
+}
+
+function eventTitlePrefix(runId) {
+  return `Encore E2E ${runId} `
+}
+
+function isCustomerOfRun(email, runId) {
+  return typeof email === 'string' && email.startsWith(customerEmailPrefix(runId))
+}
+
+// Throws unless the live connection (not just the configured URL) is the E2E database.
+function assertConnectedToE2eDatabase(identity) {
+  if (identity?.database_name !== EXPECTED_DATABASE || identity?.schema_name !== 'public') {
+    throw new E2eSafetyError(`Connected to an unexpected E2E database; expected ${EXPECTED_DATABASE} / public.`)
+  }
+}
+
 function validateE2eDatabaseTarget() {
   const values = REQUIRED_URLS.map((name) => {
     const value = process.env[name]
@@ -66,4 +103,14 @@ function validateE2eDatabaseTarget() {
   return values[0].target
 }
 
-module.exports = { E2eSafetyError, EXPECTED_DATABASE, validateE2eDatabaseTarget }
+module.exports = {
+  APP_TABLES,
+  E2eSafetyError,
+  EXPECTED_DATABASE,
+  EXPECTED_TABLES,
+  assertConnectedToE2eDatabase,
+  customerEmailPrefix,
+  eventTitlePrefix,
+  isCustomerOfRun,
+  validateE2eDatabaseTarget,
+}

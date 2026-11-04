@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
+import { customerEmailPrefix } from './support/databaseSafety.cjs'
 
 const runId = process.env.E2E_RUN_ID
 const customerPassword = `Encore-e2e-${runId}-Password!`
@@ -25,7 +26,8 @@ async function enterPassword(page, password) {
 }
 
 async function registerCustomer(page, suffix) {
-  const email = `encore-e2e-${runId}-${suffix}-${randomUUID()}@example.test`
+  // The shared prefix is what cleanup uses to find exactly this run's customers.
+  const email = `${customerEmailPrefix(runId)}${suffix}-${randomUUID()}@example.test`
   await page.goto('/register')
   await page.getByLabel('Name').fill(`E2E Customer ${suffix}`)
   await page.getByLabel('Email').fill(email)
@@ -207,4 +209,186 @@ test('logout clears the session and protected pages remain unavailable after rel
   await page.goto('/account/reservations')
   expect((await unauthenticatedSessionResponse).status()).toBe(401)
   await expect(page).toHaveURL(/\/login$/)
+})
+
+// --- Reservation limits -----------------------------------------------------
+// The server is authoritative; these scenarios check that the browser flow agrees
+// with it and that the server still refuses what the browser cannot send.
+
+const MAX_TICKETS = 6
+
+async function eventDetails(page, id) {
+  return page.evaluate(async (targetId) => {
+    const response = await fetch(`/api/events/${targetId}`, { headers: { Accept: 'application/json' } })
+    return (await response.json()).data
+  }, id)
+}
+
+async function ticketAvailability(page, id, ticketName) {
+  const event = await eventDetails(page, id)
+  return event.ticket_types.find((ticket) => ticket.name === ticketName).available_quantity
+}
+
+async function ownReservations(page) {
+  return page.evaluate(async () => {
+    const response = await fetch('/api/reservations', { credentials: 'include', headers: { Accept: 'application/json' } })
+    return (await response.json()).data
+  })
+}
+
+async function postReservation(page, body) {
+  return page.evaluate(async (payload) => {
+    const response = await fetch('/api/reservations', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return { status: response.status, payload: await response.json() }
+  }, body)
+}
+
+// Creates a published event with one small ticket type through the administrator
+// API. Its title carries the run prefix, so the run's cleanup removes it.
+async function createLowStockEvent(browser, totalQuantity) {
+  const adminContext = await browser.newContext({ baseURL: 'http://127.0.0.1:5173' })
+  try {
+    const adminPage = await adminContext.newPage()
+    await login(adminPage, process.env.E2E_ADMIN_EMAIL, process.env.E2E_ADMIN_PASSWORD)
+    await expect(adminPage.getByRole('button', { name: 'My Account' })).toBeVisible()
+    const title = `Encore E2E ${runId} Low Stock ${randomUUID().slice(0, 8)}`
+    const created = await adminPage.evaluate(async ({ eventTitle, quantity, startsAt }) => {
+      const send = async (path, method, body) => {
+        const response = await fetch(path, {
+          method,
+          credentials: 'include',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        return { status: response.status, data: (await response.json()).data }
+      }
+      const event = await send('/api/admin/events', 'POST', {
+        title: eventTitle, venue: 'Encore E2E Test Hall', description: 'Low stock browser test event.', starts_at: startsAt,
+      })
+      const ticket = await send(`/api/admin/events/${event.data.id}/ticket-types`, 'POST', {
+        name: 'Limited Admission', price: '15.00', total_quantity: quantity,
+      })
+      const published = await send(`/api/admin/events/${event.data.id}/status`, 'PATCH', { status: 'published' })
+      return { eventStatus: event.status, ticketStatus: ticket.status, publishedStatus: published.status, id: event.data.id }
+    }, { eventTitle: title, quantity: totalQuantity, startsAt: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString() })
+    expect([created.eventStatus, created.ticketStatus, created.publishedStatus]).toEqual([201, 201, 200])
+    return { id: created.id, title }
+  } finally {
+    await adminContext.close()
+  }
+}
+
+test('a customer can reserve exactly six tickets and the stepper stops there', async ({ page }) => {
+  const email = await registerCustomer(page, 'six-tickets')
+  await login(page, email, customerPassword)
+  await page.goto(`/events/${eventId}`)
+  await expect(page.getByRole('heading', { name: reservationEventTitle })).toBeVisible()
+
+  const quantity = page.getByLabel('Quantity')
+  const addTicket = page.getByRole('button', { name: 'Add one ticket' })
+  await expect(quantity).toHaveAttribute('max', String(MAX_TICKETS))
+  for (let step = 0; step < MAX_TICKETS + 2; step += 1) {
+    if (await addTicket.isDisabled()) break
+    await addTicket.click()
+  }
+  await expect(quantity).toHaveValue(String(MAX_TICKETS))
+  await expect(addTicket).toBeDisabled()
+
+  await page.getByRole('button', { name: 'Reserve tickets' }).click()
+  await expect(page.getByRole('status')).toContainText('Tickets reserved')
+  const reservations = await ownReservations(page)
+  expect(reservations).toHaveLength(1)
+  expect(reservations[0].status).toBe('pending')
+  expect(reservations[0].items[0].quantity).toBe(MAX_TICKETS)
+})
+
+test('a reservation above six tickets is refused by the form and by the server', async ({ page }) => {
+  const email = await registerCustomer(page, 'seven-tickets')
+  await login(page, email, customerPassword)
+  await page.goto(`/events/${eventId}`)
+  await expect(page.getByRole('heading', { name: reservationEventTitle })).toBeVisible()
+
+  const quantity = page.getByLabel('Quantity')
+  await quantity.fill(String(MAX_TICKETS + 1))
+  // The browser's own constraint validation reports the value as above the maximum.
+  expect(await quantity.evaluate((input) => input.validity.rangeOverflow)).toBe(true)
+  await expect(page.getByRole('button', { name: 'Add one ticket' })).toBeDisabled()
+
+  const generalAdmission = 'General Admission'
+  const availableBefore = await ticketAvailability(page, eventId, generalAdmission)
+  const event = await eventDetails(page, eventId)
+  const ticketTypeId = event.ticket_types.find((ticket) => ticket.name === generalAdmission).id
+
+  // The server refuses the same request when it is sent without the form.
+  for (const tooMany of [MAX_TICKETS + 1, 100]) {
+    const rejected = await postReservation(page, { event_id: eventId, ticket_type_id: ticketTypeId, quantity: tooMany })
+    expect(rejected.status).toBe(400)
+    expect(rejected.payload.message).toBe('You can reserve at most 6 tickets at a time.')
+  }
+  expect(await ticketAvailability(page, eventId, generalAdmission)).toBe(availableBefore)
+  expect(await ownReservations(page)).toEqual([])
+})
+
+test('the quantity selector never exceeds the stock when fewer than six tickets remain', async ({ page, browser }) => {
+  const stock = 3
+  const lowStock = await createLowStockEvent(browser, stock)
+  const email = await registerCustomer(page, 'low-stock')
+  await login(page, email, customerPassword)
+  await page.goto(`/events/${lowStock.id}`)
+  await expect(page.getByRole('heading', { name: lowStock.title })).toBeVisible()
+
+  const quantity = page.getByLabel('Quantity')
+  const addTicket = page.getByRole('button', { name: 'Add one ticket' })
+  await expect(quantity).toHaveAttribute('max', String(stock))
+  for (let step = 0; step < MAX_TICKETS; step += 1) {
+    if (await addTicket.isDisabled()) break
+    await addTicket.click()
+  }
+  await expect(quantity).toHaveValue(String(stock))
+  await expect(addTicket).toBeDisabled()
+
+  // The server also refuses a request for more than the remaining stock.
+  const event = await eventDetails(page, lowStock.id)
+  const insufficient = await postReservation(page, { event_id: lowStock.id, ticket_type_id: event.ticket_types[0].id, quantity: stock + 1 })
+  expect(insufficient.status).toBe(409)
+  expect(await ticketAvailability(page, lowStock.id, 'Limited Admission')).toBe(stock)
+
+  await page.getByRole('button', { name: 'Reserve tickets' }).click()
+  await expect(page.getByRole('status')).toContainText('Tickets reserved')
+  expect(await ticketAvailability(page, lowStock.id, 'Limited Admission')).toBe(0)
+})
+
+test('a customer with two pending reservations cannot create a third', async ({ page }) => {
+  const email = await registerCustomer(page, 'pending-limit')
+  await login(page, email, customerPassword)
+  const generalAdmission = 'General Admission'
+
+  for (const attempt of [1, 2]) {
+    await page.goto(`/events/${eventId}`)
+    await expect(page.getByRole('heading', { name: reservationEventTitle })).toBeVisible()
+    await page.getByRole('button', { name: 'Reserve tickets' }).click()
+    await expect(page.getByRole('status'), `reservation ${attempt}`).toContainText('Tickets reserved')
+  }
+  const availableWithTwoHolds = await ticketAvailability(page, eventId, generalAdmission)
+
+  await page.goto(`/events/${eventId}`)
+  await expect(page.getByRole('heading', { name: reservationEventTitle })).toBeVisible()
+  await page.getByRole('button', { name: 'Reserve tickets' }).click()
+  await expect(page.getByRole('alert')).toContainText('at most 2 pending reservations')
+
+  const reservations = await ownReservations(page)
+  expect(reservations.filter((reservation) => reservation.status === 'pending')).toHaveLength(2)
+  expect(await ticketAvailability(page, eventId, generalAdmission)).toBe(availableWithTwoHolds)
+
+  // Cancelling one hold frees a slot, so the same customer can reserve again.
+  const cancelled = await page.evaluate(async (id) => (await fetch(`/api/reservations/${id}/cancel`, { method: 'POST', credentials: 'include' })).status, reservations[0].id)
+  expect(cancelled).toBe(200)
+  await page.goto(`/events/${eventId}`)
+  await page.getByRole('button', { name: 'Reserve tickets' }).click()
+  await expect(page.getByRole('status')).toContainText('Tickets reserved')
 })

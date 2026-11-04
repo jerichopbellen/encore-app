@@ -1,6 +1,17 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
-const { validateE2eDatabaseTarget } = require('../../client/e2e/support/databaseSafety.cjs')
+const fs = require('node:fs')
+const path = require('node:path')
+const {
+  APP_TABLES,
+  E2eSafetyError,
+  EXPECTED_TABLES,
+  assertConnectedToE2eDatabase,
+  customerEmailPrefix,
+  eventTitlePrefix,
+  isCustomerOfRun,
+  validateE2eDatabaseTarget,
+} = require('../../client/e2e/support/databaseSafety.cjs')
 
 const validUrl = 'postgresql://e2e:e2e@127.0.0.1:5432/encore_e2e_test?schema=public'
 const validEnvironment = {
@@ -53,4 +64,55 @@ test('E2E database guard rejects remote hosts and mismatched database URLs', () 
   withEnvironment({ ...validEnvironment, DIRECT_DATABASE_URL: validUrl.replace('e2e:e2e', 'e2e:other') }, () => {
     assert.throws(() => validateE2eDatabaseTarget(), /must be the same E2E database URL/)
   })
+})
+
+test('cleanup matching cannot reach another run whose ID extends this one', () => {
+  const customerOf = (runId) => `${customerEmailPrefix(runId)}booking-0b7d6c1e-0000-4000-8000-000000000001@example.test`
+
+  assert.equal(isCustomerOfRun(customerOf('local'), 'local'), true)
+  assert.equal(isCustomerOfRun(customerOf('local-m2-1'), 'local-m2-1'), true)
+  // The collision this guards against: "local" must not match "local-m2-1" users.
+  assert.equal(isCustomerOfRun(customerOf('local-m2-1'), 'local'), false)
+  assert.equal(isCustomerOfRun(customerOf('local'), 'local-m2-1'), false)
+  // CI run IDs have the same "<run>-<attempt>" shape.
+  assert.equal(isCustomerOfRun(customerOf('123-10'), '123-1'), false)
+  assert.equal(isCustomerOfRun(customerOf('123-1'), '123-10'), false)
+  assert.equal(isCustomerOfRun(undefined, 'local'), false)
+
+  // No valid run ID contains the "." that ends the customer prefix, and event titles end in a space.
+  assert.equal(customerEmailPrefix('local').endsWith('.'), true)
+  assert.equal(eventTitlePrefix('local'), 'Encore E2E local ')
+  assert.equal('Encore E2E local-m2-1 Reservation Night'.startsWith(eventTitlePrefix('local')), false)
+})
+
+test('live database identity must be exactly encore_e2e_test in the public schema', () => {
+  assert.doesNotThrow(() => assertConnectedToE2eDatabase({ database_name: 'encore_e2e_test', schema_name: 'public' }))
+  for (const identity of [
+    { database_name: 'encore', schema_name: 'public' },
+    { database_name: 'encore_test', schema_name: 'public' },
+    { database_name: 'encore_migration_test', schema_name: 'public' },
+    { database_name: 'encore_stripe_check', schema_name: 'public' },
+    { database_name: 'encore_e2e_test', schema_name: 'other' },
+    { database_name: 'encore_e2e_test' },
+    {},
+    undefined,
+  ]) {
+    assert.throws(() => assertConnectedToE2eDatabase(identity), E2eSafetyError)
+  }
+})
+
+test('the expected E2E tables match the Prisma schema and every one is checked for emptiness', () => {
+  const schema = fs.readFileSync(path.join(__dirname, '../../server/prisma/schema.prisma'), 'utf8')
+  assert.equal(/@@map/.test(schema), false, 'Model names are table names only while the schema has no @@map.')
+  const models = [...schema.matchAll(/^model (\w+) \{/gm)].map((match) => match[1]).sort()
+
+  assert.deepEqual([...APP_TABLES].sort(), models)
+  assert.equal(APP_TABLES.includes('event_poster_cleanups'), true)
+  assert.deepEqual([...EXPECTED_TABLES].sort(), [...models, '_prisma_migrations'].sort())
+})
+
+test('npm run test:e2e runs the database preflight first', () => {
+  const { scripts } = JSON.parse(fs.readFileSync(path.join(__dirname, '../../client/package.json'), 'utf8'))
+  assert.equal(scripts['test:e2e'], 'playwright test')
+  assert.equal(scripts['pretest:e2e'], 'node ../server/scripts/e2e-database.cjs preflight')
 })
