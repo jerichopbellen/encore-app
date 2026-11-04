@@ -10,6 +10,9 @@ const testEnvironment = {
   NODE_ENV: 'test',
   PORT: '5000',
   FRONTEND_ORIGIN: 'http://127.0.0.1:5173',
+  // The booking scenarios use simulated checkout; a developer's server/.env may select
+  // Stripe, so pin the provider for the test backend only (dotenv never overrides it).
+  PAYMENT_PROVIDER: 'simulated',
 }
 
 export default defineConfig({

@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { normalizeReservationInput, validateReservationId, validateBookingId } = require('../../server/src/validators/reservationValidator')
+const { MAX_TICKETS_PER_RESERVATION, normalizeReservationInput, validateReservationId, validateBookingId } = require('../../server/src/validators/reservationValidator')
 
 const eventId = 'a1000000-0000-4000-8000-000000000001'
 const ticketTypeId = 'b1000000-0000-4000-8000-000000000001'
@@ -23,6 +23,19 @@ test('reservation input rejects invalid identifiers and quantities', () => {
     { event_id: eventId, ticket_type_id: ticketTypeId, quantity: '2' },
   ]) {
     assert.throws(() => normalizeReservationInput(input), (error) => error.statusCode === 400)
+  }
+})
+
+test('reservation quantity is accepted up to the per-reservation limit and rejected above it', () => {
+  assert.equal(MAX_TICKETS_PER_RESERVATION, 6)
+  for (const quantity of [1, 5, MAX_TICKETS_PER_RESERVATION]) {
+    assert.equal(normalizeReservationInput({ event_id: eventId, ticket_type_id: ticketTypeId, quantity }).quantity, quantity)
+  }
+  for (const quantity of [MAX_TICKETS_PER_RESERVATION + 1, 100, Number.MAX_SAFE_INTEGER]) {
+    assert.throws(
+      () => normalizeReservationInput({ event_id: eventId, ticket_type_id: ticketTypeId, quantity }),
+      (error) => error.statusCode === 400 && error.message === 'You can reserve at most 6 tickets at a time.',
+    )
   }
 })
 

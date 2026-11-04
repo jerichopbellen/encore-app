@@ -62,11 +62,17 @@ Run the admin security integration coverage with `npm run test:integration` from
 
 ## Browser E2E tests
 
-Encore's Playwright suite lives in `client/e2e/` because it drives the React application in a real browser. From `client/`, `npm run test:e2e` runs the six sequential Chromium scenarios. The Playwright config starts the backend with `npm start` and the Vite development server, and refuses to reuse already-running servers so a stale API cannot accidentally be tested. Vite proxies browser `/api` requests to that backend.
+Encore's Playwright suite lives in `client/e2e/` because it drives the React application in a real browser. From `client/`, `npm run test:e2e` runs the twelve sequential Chromium scenarios, including the six-ticket reservation maximum, the stock-limited quantity selector, and the two-pending-reservation limit. The Playwright config starts the backend with `npm start` and the Vite development server, and refuses to reuse already-running servers so a stale API cannot accidentally be tested. It also sets `PAYMENT_PROVIDER=simulated` for that backend process only, so the simulated-checkout scenarios run even if `server/.env` selects Stripe; no `.env` file is changed and normal startup is unaffected. Vite proxies browser `/api` requests to that backend.
 
-The suite requires a separate disposable PostgreSQL database named exactly `encore_e2e_test`, on `localhost` or `127.0.0.1`, with the `public` schema. Before migrations, `npm run e2e:database -- preflight` checks that `TEST_DATABASE_URL`, `DATABASE_URL`, and `DIRECT_DATABASE_URL` are all explicitly set to the same local E2E URL and that the database has no tables. It reuses the integration suite's PostgreSQL URL/name validator and adds the stricter database-name and loopback-host checks. The CI job supplies all three URLs explicitly, applies only the checked-in migrations to its separate ephemeral PostgreSQL service, then checks the Encore tables are empty before creating fixtures.
+The suite requires a separate disposable PostgreSQL database named exactly `encore_e2e_test`, on `localhost` or `127.0.0.1`, with the `public` schema. `npm run e2e:database -- preflight` checks that `TEST_DATABASE_URL`, `DATABASE_URL`, and `DIRECT_DATABASE_URL` are all explicitly set to the same URL, that the URL targets `localhost` or `127.0.0.1` and the database `encore_e2e_test` (a `schema` parameter, if present, must be `public`), and that the required E2E run variables are set. It reuses the integration suite's PostgreSQL URL/name validator and adds the stricter database-name and loopback-host checks. After connecting, it confirms the live connection reports `encore_e2e_test` and the `public` schema, then inspects the database:
 
-For local E2E execution, install backend and frontend packages with `npm ci` from `server/` and `client/`, then prepare a fresh local PostgreSQL database named `encore_e2e_test`; do not point these variables to the development, integration-test, staging, or production database. In PowerShell, set all three variables to the exact same URL and provide test-only values:
+- A completely empty database (no tables in `public`) is accepted, so migrations can be applied to it for the first time.
+- A database that already has tables is accepted only if its `public` tables are exactly the expected Encore tables plus `_prisma_migrations`, and the names recorded in `_prisma_migrations` exactly match the repository's migration folders, with every migration finished and none rolled back.
+- Unexpected tables, missing tables, a partly migrated database, or any other migration history make preflight fail. Preflight never changes data or schema.
+
+Preflight compares table names and migration names only; it does not compare columns, migration checksums, or row contents. Row emptiness is enforced separately: `fixtures` refuses to run unless the Encore tables are empty. The CI job supplies all three URLs explicitly, applies only the checked-in migrations to its separate ephemeral PostgreSQL service, then creates fixtures.
+
+For local E2E execution, install backend and frontend packages with `npm ci` from `server/` and `client/`, then prepare a local PostgreSQL database named `encore_e2e_test` (new and empty, or already fully migrated as described above); do not point these variables to the development, integration-test, staging, or production database. In PowerShell, set all three variables to the exact same URL and provide test-only values:
 
 ```powershell
 $env:TEST_DATABASE_URL = 'postgresql://<local-user>:<url-encoded-password>@localhost:5432/encore_e2e_test?schema=public'
@@ -78,11 +84,12 @@ $env:E2E_ADMIN_PASSWORD = 'a-test-only-password-longer-than-12'
 $env:E2E_EVENT_ID = 'a2000000-0000-4000-8000-000000000001'
 ```
 
-Then, from `server/`, validate and prepare only that disposable database:
+Then, from `server/`, validate and prepare only that disposable database. The migration command is needed for a new empty database; it applies only migrations that are not recorded yet, and is a no-op when all are applied. Run preflight again afterward to confirm the final state:
 
 ```powershell
 npm run e2e:database -- preflight
 npx prisma migrate deploy --config prisma7.config.ts
+npm run e2e:database -- preflight
 npm run e2e:database -- fixtures
 ```
 
@@ -93,4 +100,4 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Afterward, run `npm run e2e:database -- cleanup` from `server/` to remove only the E2E administrator, customer accounts, event, ticket types, reservations, and bookings created by that run. The script checks the same strict local database target before cleanup. CI's PostgreSQL service is disposable and is discarded with its job even if a test fails. E2E setup and cleanup never run against staging or production. The browser suite uses Vite's local `/api` proxy; it does not exercise Vercel's hosted rewrite itself. The existing Vercel rewrite unit test remains responsible for checking that configuration.
+Afterward, run `npm run e2e:database -- cleanup` from `server/` to remove the records that run created: the administrator and `encore-e2e-<run id>.` customer accounts (the `.` ends the run ID exactly, so run `local` can never match run `local-m2-1`), the fixture events and events titled `Encore E2E <run id> …` (including events the scenarios create), their ticket types, and those accounts' reservations, bookings, idempotency keys, payment attempts, and linked webhook rows. Records belonging to other runs or other data are not selected. `fixtures` and `cleanup` apply the same environment-variable and URL-target checks as preflight and also query `current_database()` and `current_schema()` on their live connection, refusing to read or write unless it is `encore_e2e_test` / `public`; they do not re-check migration history. `fixtures` requires all ten Encore tables, including `event_poster_cleanups`, to be empty. `npm run test:e2e` runs preflight first through the `pretest:e2e` script; running `npx playwright test` directly skips that step but still validates the URL variables. CI's PostgreSQL service is disposable and is discarded with its job even if a test fails. E2E setup and cleanup never run against staging or production. The browser suite uses Vite's local `/api` proxy; it does not exercise Vercel's hosted rewrite itself. The existing Vercel rewrite unit test remains responsible for checking that configuration.

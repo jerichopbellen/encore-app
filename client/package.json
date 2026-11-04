@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "pretest:e2e": "node ../server/scripts/e2e-database.cjs preflight",
     "test:e2e": "playwright test"
   },
   "dependencies": {

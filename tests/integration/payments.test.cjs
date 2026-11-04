@@ -197,11 +197,20 @@ test('Stripe payment lifecycle against the dedicated PostgreSQL test database', 
   async function reserve(account = fixture.account, { quantity = 2, startsAt } = {}) {
     const event = await createEvent('Payment Fixture', startsAt)
     const ticket = await createTicketType(event.id)
-    const created = await request('/api/reservations', {
-      method: 'POST', cookie: account.cookie, body: { event_id: event.id, ticket_type_id: ticket.id, quantity },
+    // Many scenarios hold more pending reservations on one shared account than the
+    // per-account limit allows through the API (which backend.test.cjs covers), so
+    // the hold is written the way the reservation service writes it.
+    const { id: reservationId } = await prisma.$transaction(async (tx) => {
+      await tx.ticket_types.update({ where: { id: ticket.id }, data: { available_quantity: { decrement: quantity } } })
+      return tx.reservations.create({
+        data: {
+          user_id: account.id,
+          status: 'pending',
+          expires_at: new Date(Date.now() + 15 * MINUTE),
+          reservation_items: { create: { ticket_type_id: ticket.id, quantity, unit_price: ticket.price } },
+        },
+      })
     })
-    assert.equal(created.response.status, 201)
-    const reservationId = created.payload.data.reservation.id
     fixture.reservationIds.push(reservationId)
     return { event, ticket, reservationId, quantity }
   }

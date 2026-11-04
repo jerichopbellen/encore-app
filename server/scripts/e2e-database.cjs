@@ -1,25 +1,29 @@
+const fs = require('node:fs')
+const path = require('node:path')
 const { Client } = require('pg')
 const bcrypt = require('bcrypt')
 const { validateTestDatabaseUrl } = require('../../tests/helpers/testDatabase.cjs')
 const {
   E2eSafetyError,
-  EXPECTED_DATABASE,
+  APP_TABLES,
+  EXPECTED_TABLES,
+  assertConnectedToE2eDatabase,
+  customerEmailPrefix,
+  eventTitlePrefix,
+  isCustomerOfRun,
   validateE2eDatabaseTarget,
 } = require('../../client/e2e/support/databaseSafety.cjs')
 
 const EVENT_ID = 'a2000000-0000-4000-8000-000000000001'
 const PAST_EVENT_ID = 'a2000000-0000-4000-8000-000000000002'
-const APP_TABLES = [
-  'users',
-  'events',
-  'ticket_types',
-  'reservations',
-  'reservation_items',
-  'bookings',
-  'idempotency_keys',
-  'payment_attempts',
-  'stripe_webhook_events',
-]
+
+function repositoryMigrationNames() {
+  const directory = path.join(__dirname, '..', 'prisma', 'migrations')
+  return fs.readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()
+}
 
 function ensureDatabaseEnvironment() {
   // Reuse the same explicit test-URL validation used by PostgreSQL integration tests.
@@ -38,15 +42,28 @@ async function preflight() {
   try {
     await client.connect()
     const identity = await client.query('SELECT current_database() AS database_name, current_schema() AS schema_name')
-    if (identity.rows[0]?.database_name !== EXPECTED_DATABASE || identity.rows[0]?.schema_name !== 'public') {
-      throw new E2eSafetyError(`Connected to an unexpected E2E database; expected ${EXPECTED_DATABASE} / public.`)
-    }
+    assertConnectedToE2eDatabase(identity.rows[0])
 
     const tables = await client.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
     )
+    // A brand-new database is accepted so migrations can be applied to it. Otherwise
+    // the schema must be exactly the fully migrated Encore schema; any other state
+    // (unknown tables, missing tables, partial or failed migrations) is rejected.
     if (tables.rowCount > 0) {
-      throw new E2eSafetyError('The E2E database schema is not empty. Use a fresh disposable E2E database; no data was changed.')
+      const present = tables.rows.map(({ table_name: name }) => name).sort()
+      const expected = [...EXPECTED_TABLES].sort()
+      if (present.join(',') !== expected.join(',')) {
+        throw new E2eSafetyError('The E2E database schema is neither empty nor the expected migrated Encore schema. No data was changed.')
+      }
+      const history = await client.query(
+        'SELECT migration_name, finished_at IS NOT NULL AS finished, rolled_back_at IS NOT NULL AS rolled_back FROM public._prisma_migrations ORDER BY migration_name',
+      )
+      const applied = history.rows.map((row) => row.migration_name)
+      if (applied.join(',') !== repositoryMigrationNames().join(',')
+        || history.rows.some((row) => !row.finished || row.rolled_back)) {
+        throw new E2eSafetyError('The E2E database migration history does not match the repository migrations. No data was changed.')
+      }
     }
   } finally {
     await client.end().catch(() => {})
@@ -58,7 +75,17 @@ async function getPrisma() {
   // The test URL is explicitly required and validated before runtime config loads.
   process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   const { getPrismaClient } = require('../src/config/prisma')
-  return getPrismaClient()
+  const prisma = await getPrismaClient()
+  // Fixtures and cleanup write and delete, so confirm what the connection actually
+  // reached (not only what the URL says) before any caller touches a table.
+  try {
+    const [identity] = await prisma.$queryRaw`SELECT current_database() AS database_name, current_schema() AS schema_name`
+    assertConnectedToE2eDatabase(identity)
+  } catch (error) {
+    await prisma.$disconnect().catch(() => {})
+    throw error
+  }
+  return prisma
 }
 
 async function createFixtures() {
@@ -130,19 +157,22 @@ async function cleanupFixtures() {
   try {
     const runId = process.env.E2E_RUN_ID
     const adminEmail = process.env.E2E_ADMIN_EMAIL
-    const eventPrefix = `Encore E2E ${runId} `
-    const customerPrefix = `encore-e2e-${runId}-`
+    const eventPrefix = eventTitlePrefix(runId)
+    const customerPrefix = customerEmailPrefix(runId)
     const [users, events] = await Promise.all([
       prisma.users.findMany({
         where: { OR: [{ email: adminEmail }, { email: { startsWith: customerPrefix } }] },
-        select: { id: true },
+        select: { id: true, email: true },
       }),
       prisma.events.findMany({
         where: { OR: [{ id: EVENT_ID }, { id: PAST_EVENT_ID }, { title: { startsWith: eventPrefix } }] },
         select: { id: true },
       }),
     ])
-    const userIds = users.map(({ id }) => id)
+    // Second check in code: only the administrator or an exact-run customer is removed.
+    const userIds = users
+      .filter(({ email }) => email === adminEmail || isCustomerOfRun(email, runId))
+      .map(({ id }) => id)
     const eventIds = events.map(({ id }) => id)
     const reservations = userIds.length
       ? await prisma.reservations.findMany({ where: { user_id: { in: userIds } }, select: { id: true } })

@@ -7,6 +7,8 @@ import { formatPrice } from '../../utils/eventDisplay'
 
 // Ticket types at or below this many remaining are flagged as nearly gone.
 const LOW_STOCK_THRESHOLD = 10
+// Mirrors the server's per-reservation limit; the server remains the authority.
+const MAX_TICKETS_PER_RESERVATION = 6
 
 function describeAvailability(ticket) {
   if (ticket.available_quantity === 0) return 'Sold out'
@@ -29,6 +31,7 @@ function EventReservationPanel({ event }) {
   const requestedQuantity = Number(quantity)
   const quantityIsValid = Number.isSafeInteger(requestedQuantity) && requestedQuantity > 0
   const isSoldOut = !ticketType || ticketType.available_quantity < 1
+  const maxSelectable = Math.max(1, Math.min(MAX_TICKETS_PER_RESERVATION, ticketType?.available_quantity || 1))
   const total = ticketType && quantityIsValid
     ? formatPrice((Number(ticketType.price) * requestedQuantity).toFixed(2))
     : '—'
@@ -39,11 +42,11 @@ function EventReservationPanel({ event }) {
     setErrorMessage('')
   }
 
-  // The stepper keeps the quantity within 1 and the selected type's availability.
+  // The stepper keeps the quantity within 1 and the smaller of the per-reservation
+  // limit and the selected type's availability.
   function changeQuantity(step) {
     const current = quantityIsValid ? requestedQuantity : 1
-    const maximum = Math.max(1, ticketType?.available_quantity || 1)
-    setQuantity(String(Math.min(maximum, Math.max(1, current + step))))
+    setQuantity(String(Math.min(maxSelectable, Math.max(1, current + step))))
     setErrorMessage('')
   }
 
@@ -57,6 +60,10 @@ function EventReservationPanel({ event }) {
     }
     if (!quantityIsValid) {
       setErrorMessage('Enter a whole number of tickets greater than zero.')
+      return
+    }
+    if (requestedQuantity > MAX_TICKETS_PER_RESERVATION) {
+      setErrorMessage(`You can reserve at most ${MAX_TICKETS_PER_RESERVATION} tickets at a time.`)
       return
     }
     if (requestedQuantity > ticketType.available_quantity) {
@@ -162,7 +169,7 @@ function EventReservationPanel({ event }) {
                 type="number"
                 name="quantity"
                 min="1"
-                max={ticketType?.available_quantity || undefined}
+                max={ticketType?.available_quantity ? maxSelectable : undefined}
                 step="1"
                 inputMode="numeric"
                 value={quantity}
@@ -173,7 +180,7 @@ function EventReservationPanel({ event }) {
                 disabled={isSoldOut}
                 required
               />
-              <button type="button" onClick={() => changeQuantity(1)} disabled={isSoldOut || requestedQuantity >= (ticketType?.available_quantity || 1)} aria-label="Add one ticket">+</button>
+              <button type="button" onClick={() => changeQuantity(1)} disabled={isSoldOut || requestedQuantity >= maxSelectable} aria-label="Add one ticket">+</button>
             </div>
             <div className="reservation-summary" aria-live="polite">
               <span>Total</span>

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const { randomBytes, randomUUID } = require('node:crypto')
 const { Client } = require('../../server/node_modules/pg')
 const { configureTestDatabase } = require('../helpers/testDatabase.cjs')
+const { releasePendingHolds } = require('../helpers/pendingHolds.cjs')
 
 // Configure Prisma before requiring the app: the ordinary server/.env is never
 // allowed to select a database for this suite.
@@ -215,6 +216,9 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       fixture.server.once('error', reject)
     })
     fixture.baseUrl = `http://127.0.0.1:${fixture.server.address().port}`
+    // The per-account pending-reservation limit would otherwise be hit by holds
+    // that earlier scenarios left on the shared fixture accounts.
+    t.beforeEach(() => releasePendingHolds(prisma, [fixture.account?.id, fixture.otherAccount?.id].filter(Boolean)))
 
     await t.test('health, not-found, and safe error responses', async () => {
       const health = await request('/api/health')
@@ -909,9 +913,12 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
       const mismatchedTicket = await createReservation(fixture.account, secondEvent.id, ticket.id, 1)
       assert.equal(mismatchedTicket.response.status, 400)
       const reservationCountBeforeInsufficient = await prisma.reservations.count({ where: { user_id: fixture.account.id } })
-      const insufficient = await createReservation(fixture.account, event.id, ticket.id, 100)
+      // Leave fewer tickets than the largest allowed reservation to exercise the stock check.
+      await prisma.ticket_types.update({ where: { id: ticket.id }, data: { available_quantity: 3 } })
+      const insufficient = await createReservation(fixture.account, event.id, ticket.id, 4)
       assert.equal(insufficient.response.status, 409)
-      assert.equal((await prisma.ticket_types.findUnique({ where: { id: ticket.id } })).available_quantity, 6)
+      assert.equal((await prisma.ticket_types.findUnique({ where: { id: ticket.id } })).available_quantity, 3)
+      await prisma.ticket_types.update({ where: { id: ticket.id }, data: { available_quantity: 6 } })
       assert.equal(await prisma.reservations.count({ where: { user_id: fixture.account.id } }), reservationCountBeforeInsufficient)
 
       const otherOwner = await request(`/api/reservations/${reservation.id}`, { cookie: fixture.otherAccount.cookie })
@@ -1062,6 +1069,150 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
         .map((result) => result.payload.data.reservation.id)
       assert.equal(successfulReservationIds.length, 1)
       assert.equal(await prisma.reservations.count({ where: { id: { in: successfulReservationIds } } }), 1)
+    })
+
+    await t.test('reservation size is capped per request without touching inventory', async () => {
+      const buyer = await createAccount('Quantity Cap Customer')
+      const capEvent = await createEvent('Quantity Cap Fixture')
+      const capTicket = await createTicketType(capEvent.id, 8)
+      const available = async () => (await prisma.ticket_types.findUnique({ where: { id: capTicket.id } })).available_quantity
+      const cancel = (id) => request(`/api/reservations/${id}/cancel`, { method: 'POST', cookie: buyer.cookie })
+
+      for (const quantity of [5, 6]) {
+        const accepted = await createReservation(buyer, capEvent.id, capTicket.id, quantity)
+        assert.equal(accepted.response.status, 201)
+        assert.equal(accepted.payload.data.reservation.items[0].quantity, quantity)
+        assert.equal(await available(), 8 - quantity)
+        assert.equal((await cancel(accepted.payload.data.reservation.id)).response.status, 200)
+        assert.equal(await available(), 8)
+      }
+
+      for (const quantity of [7, 8, 100, 1e9]) {
+        const rejected = await createReservation(buyer, capEvent.id, capTicket.id, quantity)
+        assert.equal(rejected.response.status, 400)
+        assert.equal(rejected.payload.success, false)
+        assert.equal(rejected.payload.message, 'You can reserve at most 6 tickets at a time.')
+      }
+      assert.equal(await available(), 8)
+      assert.equal(await prisma.reservation_items.count({ where: { ticket_type_id: capTicket.id, reservations: { status: 'pending' } } }), 0)
+    })
+
+    await t.test('an account cannot hold more than two pending reservations', async () => {
+      const holder = await createAccount('Pending Limit Customer')
+      const bystander = await createAccount('Unaffected Customer')
+      const eventA = await createEvent('Pending Limit Fixture A')
+      const eventB = await createEvent('Pending Limit Fixture B')
+      const eventC = await createEvent('Pending Limit Fixture C')
+      const ticketA = await createTicketType(eventA.id, 8)
+      const ticketB = await createTicketType(eventB.id, 8)
+      const ticketC = await createTicketType(eventC.id, 8)
+      const sameEventTicket = await createTicketType(eventA.id, 8)
+      const available = async (ticketTypeId) => (await prisma.ticket_types.findUnique({ where: { id: ticketTypeId } })).available_quantity
+      const pendingCount = () => prisma.reservations.count({ where: { user_id: holder.id, status: 'pending' } })
+
+      const first = await createReservation(holder, eventA.id, ticketA.id, 2)
+      const second = await createReservation(holder, eventB.id, ticketB.id, 1)
+      assert.equal(first.response.status, 201)
+      assert.equal(second.response.status, 201)
+
+      // A different event, a different ticket type on a held event, and the same
+      // ticket type are all the same account, so every attempt is rejected.
+      for (const [eventId, ticketTypeId] of [[eventC.id, ticketC.id], [eventA.id, sameEventTicket.id], [eventA.id, ticketA.id]]) {
+        const blocked = await createReservation(holder, eventId, ticketTypeId, 1)
+        assert.equal(blocked.response.status, 409)
+        assert.equal(blocked.payload.success, false)
+        assert.match(blocked.payload.message, /at most 2 pending reservations/)
+      }
+      assert.equal(await pendingCount(), 2)
+      assert.equal(await available(ticketA.id), 6)
+      assert.equal(await available(ticketB.id), 7)
+      assert.equal(await available(ticketC.id), 8)
+      assert.equal(await available(sameEventTicket.id), 8)
+
+      // Existing holds stay listed and usable, and other accounts are unaffected.
+      const listed = await request('/api/reservations', { cookie: holder.cookie })
+      assert.equal(listed.payload.data.filter((reservation) => reservation.status === 'pending').length, 2)
+      assert.equal((await createReservation(bystander, eventC.id, ticketC.id, 1)).response.status, 201)
+
+      // A cancelled hold frees a slot.
+      const cancelled = await request(`/api/reservations/${first.payload.data.reservation.id}/cancel`, { method: 'POST', cookie: holder.cookie })
+      assert.equal(cancelled.response.status, 200)
+      const afterCancel = await createReservation(holder, eventC.id, ticketC.id, 1)
+      assert.equal(afterCancel.response.status, 201)
+      assert.equal((await createReservation(holder, eventA.id, ticketA.id, 1)).response.status, 409)
+
+      // An expired hold frees a slot, even though its status was still 'pending' in the row.
+      await prisma.reservations.update({ where: { id: second.payload.data.reservation.id }, data: { expires_at: new Date(Date.now() - 1000) } })
+      const afterExpiry = await createReservation(holder, eventA.id, ticketA.id, 1)
+      assert.equal(afterExpiry.response.status, 201)
+      assert.equal((await prisma.reservations.findUnique({ where: { id: second.payload.data.reservation.id } })).status, 'expired')
+      assert.equal(await available(ticketB.id), 8)
+      assert.equal((await createReservation(holder, eventB.id, ticketB.id, 1)).response.status, 409)
+
+      // A completed checkout turns the hold into a booking, which frees a slot too.
+      const paid = await checkout(holder, afterCancel.payload.data.reservation.id)
+      assert.equal(paid.response.status, 201)
+      assert.equal(await pendingCount(), 1)
+      assert.equal((await createReservation(holder, eventB.id, ticketB.id, 1)).response.status, 201)
+      assert.equal(await pendingCount(), 2)
+    })
+
+    await t.test('reservations above the limit that already exist keep working but block new holds', async () => {
+      const legacy = await createAccount('Legacy Holds Customer')
+      const legacyEvent = await createEvent('Legacy Holds Fixture')
+      // Three holds of one ticket each are already committed (8 total, 5 available).
+      const legacyTicket = await createTicketType(legacyEvent.id, 5)
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
+      const legacyIds = []
+      for (let index = 0; index < 3; index += 1) {
+        const created = await prisma.reservations.create({
+          data: {
+            user_id: legacy.id,
+            status: 'pending',
+            expires_at: expiresAt,
+            reservation_items: { create: { ticket_type_id: legacyTicket.id, quantity: 1, unit_price: '12.35' } },
+          },
+        })
+        fixture.reservationIds.push(created.id)
+        legacyIds.push(created.id)
+      }
+
+      const blocked = await createReservation(legacy, legacyEvent.id, legacyTicket.id, 1)
+      assert.equal(blocked.response.status, 409)
+      assert.equal((await prisma.ticket_types.findUnique({ where: { id: legacyTicket.id } })).available_quantity, 5)
+      assert.equal(await prisma.reservations.count({ where: { user_id: legacy.id, status: 'pending' } }), 3)
+
+      const paid = await checkout(legacy, legacyIds[0])
+      assert.equal(paid.response.status, 201)
+      // Two holds remain, which is exactly the limit, so a new hold is still refused.
+      assert.equal((await createReservation(legacy, legacyEvent.id, legacyTicket.id, 1)).response.status, 409)
+      const cancelled = await request(`/api/reservations/${legacyIds[1]}/cancel`, { method: 'POST', cookie: legacy.cookie })
+      assert.equal(cancelled.response.status, 200)
+      assert.equal((await prisma.ticket_types.findUnique({ where: { id: legacyTicket.id } })).available_quantity, 6)
+      assert.equal((await createReservation(legacy, legacyEvent.id, legacyTicket.id, 1)).response.status, 201)
+    })
+
+    await t.test('concurrent reservation requests cannot bypass the account limit', async () => {
+      const attempts = 6
+      for (const sharedTicket of [false, true]) {
+        const racer = await createAccount(sharedTicket ? 'Same Ticket Racer' : 'Distinct Ticket Racer')
+        const racerEvent = await createEvent('Account Limit Race Fixture')
+        const ticketTypes = []
+        for (let index = 0; index < (sharedTicket ? 1 : attempts); index += 1) {
+          ticketTypes.push(await createTicketType(racerEvent.id, 8))
+        }
+        const startTogether = makeBarrier(attempts)
+        const outcomes = await Promise.all(Array.from({ length: attempts }, (_, index) => {
+          const target = ticketTypes[index % ticketTypes.length]
+          return startTogether(() => createReservation(racer, racerEvent.id, target.id, 1))
+        }))
+
+        assert.deepEqual(outcomes.map((result) => result.response.status).sort((a, b) => a - b), [201, 201, 409, 409, 409, 409])
+        assert.equal(await prisma.reservations.count({ where: { user_id: racer.id, status: 'pending' } }), 2)
+        const remaining = await prisma.ticket_types.findMany({ where: { id: { in: ticketTypes.map((ticketType) => ticketType.id) } } })
+        // Exactly the two accepted reservations hold stock; rejected ones changed nothing.
+        assert.equal(remaining.reduce((sum, ticketType) => sum + (8 - ticketType.available_quantity), 0), 2)
+      }
     })
 
     await t.test('checkout idempotency replays committed outcomes and rolls failures back', async () => {
