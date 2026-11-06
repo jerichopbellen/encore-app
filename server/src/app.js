@@ -14,8 +14,14 @@ const { sameOriginMutationMiddleware } = require('./middleware/sameOriginMutatio
 const { requestLogger } = require('./middleware/requestLogger')
 const { createReadinessHandler } = require('./controllers/readinessController')
 const cookieParser = require('cookie-parser')
+const { rateLimiters, configureTrustProxy } = require('./middleware/rateLimiters')
+const { getRateLimitConfig } = require('./config/rateLimit')
 
 const app = express()
+
+// Express trusts a proxy only where IP-based rate limiting is enabled (NODE_ENV development or
+// test). In production TRUST_PROXY_HOPS is ignored and IP-based limits stay off; see DEPLOYMENT.md.
+configureTrustProxy(app, getRateLimitConfig(process.env).effectiveTrustProxyHops)
 
 app.use('/api', corsMiddleware)
 app.use('/api', sameOriginMutationMiddleware)
@@ -35,6 +41,10 @@ app.get('/api/health', (req, res) => {
 })
 
 app.get('/api/ready', createReadinessHandler())
+
+// Loose baseline for GET/HEAD API reads. Mounted after health, readiness and the Stripe
+// webhook so those never reach it; stricter per-route limiters live in the route files.
+app.use('/api', rateLimiters.generalRead)
 
 app.use('/api/events', eventRoutes)
 app.use('/api/auth', authRoutes)

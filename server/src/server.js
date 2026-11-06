@@ -1,6 +1,7 @@
 require('dotenv').config()
 
 const { validateEnvironment } = require('./config/environment')
+const { getRateLimitConfig } = require('./config/rateLimit')
 const { disconnectPrisma } = require('./config/prisma')
 
 let configuration
@@ -9,6 +10,14 @@ try {
 } catch (error) {
   console.error(`Encore startup configuration error: ${error.message}`)
   process.exit(1)
+}
+
+const rateLimitConfig = getRateLimitConfig(process.env)
+if (!rateLimitConfig.ipLimitingEnabled) {
+  console.warn('Encore rate limiting: IP-based limits are disabled (they run only when NODE_ENV is "development" or "test"). Account-based limits remain active.')
+  if (rateLimitConfig.trustProxyHops !== null) {
+    console.warn('Encore rate limiting: TRUST_PROXY_HOPS is set but ignored while IP-based limits are disabled. Leave it unset.')
+  }
 }
 
 const app = require('./app')

@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test'
 import process from 'node:process'
 import { validateE2eDatabaseTarget } from './e2e/support/databaseSafety.cjs'
+import { relaxedRateLimitEnvironment } from '../tests/helpers/rateLimitTestEnvironment.cjs'
 
 // Validate the explicit local test target before Playwright starts the backend.
 validateE2eDatabaseTarget()
@@ -13,6 +14,9 @@ const testEnvironment = {
   // The booking scenarios use simulated checkout; a developer's server/.env may select
   // Stripe, so pin the provider for the test backend only (dotenv never overrides it).
   PAYMENT_PROVIDER: 'simulated',
+  // The scenarios register and sign in many accounts from one address; raise the rate limits
+  // for this test backend only. Limiter behavior is covered by the rateLimit* unit tests.
+  ...relaxedRateLimitEnvironment(),
 }
 
 export default defineConfig({

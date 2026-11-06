@@ -43,8 +43,32 @@ function validateFrontendOrigin(value) {
   }
 }
 
+const MAX_TRUST_PROXY_HOPS = 5
+
+// TRUST_PROXY_HOPS is the exact number of reverse proxies in front of Express whose
+// X-Forwarded-For entries may be believed. Leaving it unset means "not verified": the
+// result is null, Express keeps its default of trusting no proxy, and IP-based rate
+// limits stay off in production. 0 explicitly means "no proxy in front of Express".
+// Booleans and subnet names are rejected on purpose: `true` would trust any client-supplied header.
+// In production 0 is rejected too: Encore always runs behind at least Render's proxy, so 0 would
+// make Express report that proxy's address for every visitor and put them all in one bucket.
+function parseTrustProxyHops(value, { production = false } = {}) {
+  if (value === undefined || String(value).trim() === '') return null
+  const text = String(value).trim()
+  if (!/^\d+$/.test(text) || Number(text) > MAX_TRUST_PROXY_HOPS) {
+    throw new Error(`TRUST_PROXY_HOPS must be a whole number from 0 to ${MAX_TRUST_PROXY_HOPS}, set only after the proxy chain is verified.`)
+  }
+  if (production && Number(text) === 0) {
+    throw new Error('TRUST_PROXY_HOPS=0 is not allowed in production: the API always runs behind a proxy, so 0 would give every visitor the proxy\'s address. Leave it unset until the proxy chain is verified.')
+  }
+  return Number(text)
+}
+
 function validateEnvironment(env = process.env) {
   const port = parsePort(env.PORT)
+  // Required lazily: the rate-limit configuration reads parseTrustProxyHops from this module.
+  // Fails startup on a malformed TRUST_PROXY_HOPS or RATE_LIMIT_* value.
+  require('./rateLimit').getRateLimitConfig(env)
   // Fails startup on an unknown PAYMENT_PROVIDER or incomplete Stripe test configuration.
   validatePaymentEnvironment(env)
   // Fails startup on a partial Cloudinary setup or an invalid poster upload limit.
@@ -76,4 +100,4 @@ function validateEnvironment(env = process.env) {
   return { port, host: '0.0.0.0', cookieSameSite }
 }
 
-module.exports = { validateEnvironment, parsePort, validateDatabaseUrl, validateFrontendOrigin }
+module.exports = { validateEnvironment, parsePort, parseTrustProxyHops, validateDatabaseUrl, validateFrontendOrigin }

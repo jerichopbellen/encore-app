@@ -29,14 +29,50 @@ function validateTestDatabaseUrl(value) {
   return value
 }
 
+const INTEGRATION_DATABASE = 'encore_test'
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+// Stricter than validateTestDatabaseUrl (which the E2E tooling reuses for its own database):
+// the integration suites may only ever target the local database named exactly `encore_test`.
+// Messages never echo the URL.
+function validateIntegrationDatabaseUrl(value) {
+  const validated = validateTestDatabaseUrl(value)
+  const parsed = new URL(validated)
+  if (!LOOPBACK_HOSTS.has(parsed.hostname)) {
+    throw new Error(`Integration tests only run against a local PostgreSQL server; TEST_DATABASE_URL must use localhost or 127.0.0.1.`)
+  }
+  if (decodeURIComponent(parsed.pathname.slice(1)) !== INTEGRATION_DATABASE) {
+    throw new Error(`Integration tests only run against the database named exactly ${INTEGRATION_DATABASE}.`)
+  }
+  if (parsed.searchParams.has('schema') && parsed.searchParams.get('schema') !== 'public') {
+    throw new Error('Integration tests only run against the public schema.')
+  }
+  return validated
+}
+
+// Throws unless the live connection (not just the configured URL) is encore_test / public.
+// Call it before the first count or write, outside any try block that rewrites errors.
+async function assertConnectedToIntegrationDatabase(prisma) {
+  const [identity] = await prisma.$queryRaw`SELECT current_database() AS database_name, current_schema() AS schema_name`
+  if (identity?.database_name !== INTEGRATION_DATABASE || identity?.schema_name !== 'public') {
+    throw new Error(`Connected to an unexpected integration-test database; expected ${INTEGRATION_DATABASE} / public. No data was read or changed.`)
+  }
+}
+
 function configureTestDatabase() {
   // Read only the dedicated test file; never load server/.env as test configuration.
   const testEnvPath = path.resolve(__dirname, '../../server/.env.test')
   dotenv.config({ path: testEnvPath, quiet: true })
 
-  const testDatabaseUrl = validateTestDatabaseUrl(process.env.TEST_DATABASE_URL)
+  const testDatabaseUrl = validateIntegrationDatabaseUrl(process.env.TEST_DATABASE_URL)
   // Prisma's existing singleton reads DATABASE_URL; point it explicitly at the test DB.
   process.env.DATABASE_URL = testDatabaseUrl
 }
 
-module.exports = { validateTestDatabaseUrl, configureTestDatabase }
+module.exports = {
+  INTEGRATION_DATABASE,
+  validateTestDatabaseUrl,
+  validateIntegrationDatabaseUrl,
+  assertConnectedToIntegrationDatabase,
+  configureTestDatabase,
+}

@@ -41,7 +41,7 @@ Set these server-only variables in the Render dashboard:
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `NODE_ENV` | Yes | Set to `production`; enables secure cookies and production startup checks. |
+| `NODE_ENV` | Yes | Set to exactly `production`; enables secure cookies and production startup checks. The IP-based rate limiters run only when it is exactly `development` or `test`, so any other value (including a typo or an unset variable) leaves them off. |
 | `DATABASE_URL` | Yes | Neon pooled PostgreSQL URL for API queries, including `sslmode=require`. |
 | `DIRECT_DATABASE_URL` | Yes before migration operations | Neon direct URL for Prisma CLI and schema migration commands, targeting the same database. |
 | `JWT_SECRET` | Yes | Random private signing secret of at least 32 bytes; never expose it to Vercel. |
@@ -49,6 +49,8 @@ Set these server-only variables in the Render dashboard:
 | `COOKIE_SAME_SITE` | Optional | Keep `lax` for the Vercel `/api` proxy. Do not use `none` to compensate for direct cross-site provider-host requests. |
 | `JWT_EXPIRES_IN` | Optional | Defaults to `1d`. |
 | `PORT` | No | Supplied by Render. Do not hardcode a dashboard value. |
+| `TRUST_PROXY_HOPS` | **Leave unset in production** | Number of trusted proxies in front of Express (1 to 5 in production; 0 is rejected there). In production it is ignored (the IP-based limiters stay off and startup logs a warning), because no single value is safe for the current Vercel-to-Render architecture. See [Client IP handling and IP-based limits](#client-ip-handling-and-ip-based-limits-disabled-in-production). |
+| `RATE_LIMIT_*` | Optional | Per-limiter overrides of the initial limits and windows; see the same section. |
 | `PAYMENT_PROVIDER` | Optional | `simulated` (default) or `stripe`. With `stripe`, the API requires Stripe-hosted Checkout in test mode and rejects simulated checkout. Not configured in `render.yaml`; deliberately left for a separate, reviewed deployment change. |
 | `STRIPE_SECRET_KEY` | Only with `stripe` | Stripe **test-mode** secret key (`sk_test_...`); live keys are rejected at startup. Keep it server-side only. |
 | `STRIPE_WEBHOOK_SECRET` | Only with `stripe` | Signing secret (`whsec_...`) of the Stripe webhook endpoint `POST /api/payments/stripe/webhook`. Subscribe it to `checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed`. |
@@ -135,8 +137,95 @@ The seed script is for local demo/development data only. It is not run by Render
 - `/api/health` is a lightweight process liveness response. Render uses `/api/ready`, which runs a bounded `SELECT 1` through the existing Prisma client and returns only a generic 503 on failure.
 - Credentialed CORS allows only the exact `FRONTEND_ORIGIN`, the HTTP methods used by the app, and `Accept`, `Content-Type`, and `Idempotency-Key` headers. Disallowed origins receive no allow-origin header. A shared API middleware also rejects unsafe requests carrying a different `Origin`, including simple-form requests, before route handlers run; non-browser clients without an `Origin` header remain supported.
 - Error responses remain generic for server errors. Structured logs contain route templates, method, status, duration, and error type only; they omit raw URLs, query strings, bodies, headers, cookies, tokens, and error messages. Health and readiness probes are not request-logged.
-- Authentication rate limiting is not implemented here. A process-local limiter would be bypassable across Render instances and depends on a correctly trusted proxy chain for client IPs. Before public launch, configure suitable edge/provider protection or scope a shared, tested limiter separately; do not assume this code provides brute-force protection.
+- Express-level rate limiting exists (see [Express-level rate limiting](#express-level-rate-limiting)), but it is process-local, resets on restart, is per instance, and its IP-based limiters are intentionally off in production because the client IP cannot be identified safely across both request paths. Edge/provider protection is not implemented; do not assume the application layer alone provides brute-force or DDoS protection.
 - Database connectivity and readiness are not proof of backups. Configure and test Neon retention/restore procedures before storing real customer data.
+
+## Express-level rate limiting
+
+The Encore API limits requests inside the Express process using `express-rate-limit`. This is the **application layer** only. **Edge protection (DDoS mitigation, a WAF, broad IP rate limiting at a CDN or proxy) is not implemented here** and is planned separately. PostgreSQL constraints, transactions and row locks remain the authority for inventory and booking correctness; the limiters never replace them.
+
+### Limits (initial proposals, not requirements)
+
+Every limit can be tuned without a code change with `RATE_LIMIT_<NAME>_MAX` and `RATE_LIMIT_<NAME>_WINDOW_MINUTES` on Render (a malformed value fails startup; a misspelled variable name is silently ignored, so check the name). `RATE_LIMIT_MAX_KEYS` (default 10000, minimum 100) caps how many counters each limiter holds.
+
+A request that receives a `429` is **always given back**: it never uses up capacity or inflates a counter. The "stays counted" column lists which other responses keep a slot used.
+
+In production the **account-keyed** limiters and the per-email login fallback are **active**. The IP-keyed limiters, and the email-plus-IP login failure limiter, are **off** in production because the client IP cannot be identified safely (see [Client IP handling and IP-based limits](#client-ip-handling-and-ip-based-limits-disabled-in-production)). The IP-keyed limiters run only when `NODE_ENV` is exactly `development` or `test`, where the socket address is the client address; production, an unset `NODE_ENV` and any other value leave them off.
+
+| Limiter (`<NAME>`) | Applies to | Key | Default | Stays counted | Production |
+| --- | --- | --- | --- | --- | --- |
+| `LOGIN_IP` | `POST /api/auth/login` | IP | 20 / 15 min | every response | **off** |
+| `LOGIN_FAILURE` | `POST /api/auth/login` | normalized email + IP | 5 / 15 min | only `401` (failed) logins | **off** (the next row is used instead) |
+| `LOGIN_FAILURE_NO_IP` | same, **used instead of `LOGIN_FAILURE` while IP limiting is off** | normalized email | 50 / 60 min | only `401` logins | **active** |
+| `REGISTRATION` | `POST /api/auth/register` | IP | 5 / 60 min | everything except validation `400`s | **off** |
+| `RESERVATION_ATTEMPT` | `POST /api/reservations` | user ID | 60 / 10 min | every response (`201`, `400`, `404`, `409`, `5xx`) | **active** |
+| `RESERVATION_CREATION` | `POST /api/reservations` | user ID | 10 / 10 min | only `201` (a hold was created) | **active** |
+| `RESERVATION_IP` | `POST /api/reservations` | IP (backstop) | 30 / 10 min | everything except `400` and `409` | **off** |
+| `RESERVATION_CANCEL` | `POST /api/reservations/:id/cancel` | user ID | 30 / 10 min | every response, including errors | **active** |
+| `RESERVATION_READ` | `GET /api/reservations`, `GET /api/reservations/:id`, `GET /api/reservations/:id/payments/latest` | user ID | 200 / 10 min | every response | **active** |
+| `PAYMENT_INITIATION` | `POST /api/reservations/:id/checkout` and `/payments` (one shared bucket) | user ID | 10 / 10 min | everything except `400` | **active** |
+| `PAYMENT_CANCELLATION` | `POST /api/reservations/:id/payments/cancel` | user ID | 20 / 10 min | everything except `400` | **active** |
+| `POSTER_MUTATION` | `POST` and `DELETE /api/admin/events/:eventId/poster` (Cloudinary) | admin user ID | 20 / 10 min | every response | **active** |
+| `GENERAL_READ` | every `GET`/`HEAD` under `/api` | IP | 300 / 15 min | every response | **off** |
+
+Design notes:
+
+- **Exempt:** `GET /api/health`, `GET /api/ready` and `POST /api/payments/stripe/webhook` are registered before the general limiter and are also excluded inside it. The webhook is never restricted by IP; its Stripe signature check is unchanged.
+- **Login.** Successful logins and validation errors are given back and never count toward the failure limit. When IP limiting is on (not in production today), failures are keyed on email **and** IP, so an attacker on another IP cannot lock a victim out; they only fill their own counter. A locked email+IP is blocked even with the right password until the window passes. The `429` is identical for registered and unknown emails.
+- **No-IP login fallback (temporary, weaker).** While no trusted IP exists (production today), failed logins are counted per email alone, at 50 per hour. This is **not equivalent to email-plus-IP protection**: it slows sustained guessing against one account, but anyone can spend that shared counter, so a determined person can still keep a known email locked out, at a cost of about 50 requests per hour. It is deliberately generous so casual abuse cannot lock accounts out. It stays the production login-failure safeguard for as long as IP-based limiting is disabled; the email-plus-IP limit would replace it only if IP limiting is later enabled under the conditions below. Its store can also fill under a flood of distinct emails; see the capacity trade-off under "Counters are in memory, per process".
+- **Reservations.** Two account limiters run in order after authentication. `RESERVATION_ATTEMPT` counts every request that reaches the handler, because even rejected attempts (sold out, hold cap, ticket-type mismatch) run the global expiry sweep, a per-user lock and an inventory-row lock. `RESERVATION_CREATION` counts only successful holds, which is what stops rapid create-and-cancel cycling. A request blocked by either limiter is given back by both. The existing six-ticket and two-pending-hold rules and all database locking are unchanged. Requests are counted when they arrive, so a burst of simultaneous requests can be blocked slightly early (before it is known whether they would fail); it can never admit more than the limit.
+- **Reservation reads.** `RESERVATION_READ` is mounted on the whole reservations router but acts only on GET requests, which are exactly the three routes listed above (each runs the expiry sweep). Writes are skipped, so creation, cancellation, checkout and payments are never counted twice. The payment return page polls about once every 2 seconds for up to 45 polls, well inside 200 per 10 minutes.
+- **Checkout / payments.** The limiter runs before the handler, so a `429` leaves no reservation, payment attempt or Stripe session behind. Replays with the same `Idempotency-Key` count like any other request; the default leaves headroom for network-error retries.
+- **Cancellation** limiters: reservation cancellation counts errors too (each call runs the expiry sweep), so failing requests cannot bypass it. Payment cancellation has its own bucket so a customer who has used up payment starts can still release their hold; it is bounded because Stripe mode makes an outbound Stripe call.
+- **Posters.** Only the two Cloudinary routes are limited, per admin account and before the upload body is read. Other admin event and ticket-type writes are database-only and are not limited, nor is `PATCH /api/auth/me`.
+- **Responses and logging.** `429` responses use the normal `{ success: false, message }` body, include `Retry-After`, and carry CORS headers, so the existing client displays `message` unchanged. Every `429` is logged once as `{"event":"rate_limited","limiter":"…","route":"…","status":429}`: no email, IP, user ID, body, header, cookie or token is ever logged, and the route is the template (for example `/api/reservations/:reservationId/cancel`), not the URL.
+
+### Counters are in memory, per process
+
+Counters live in a bounded in-process store (`server/src/middleware/boundedMemoryStore.js`):
+
+- **They reset on every restart, deploy and Render free-tier spin-down.**
+- **They are per instance.** With N backend instances an attacker can send about N times each limit. This is not a distributed or durable guarantee. Render currently runs one instance (`render.yaml` sets no instance count); do not scale out without first moving the limiters to a shared store (swap the single `createStore` function in `server/src/middleware/rateLimiters.js`).
+- **Memory is bounded** by `RATE_LIMIT_MAX_KEYS` counters per limiter, and emails are hashed into fixed-size keys. Expired counters are swept every minute, and a counter that is given back to zero is deleted at once.
+- **Behavior at capacity.** Each limiter's store holds at most `RATE_LIMIT_MAX_KEYS` counters (default 10000). Only expired counters are ever removed to make room; a live counter is never evicted, so a flood of unique keys cannot erase an active lockout. If a store is full of live counters, requests for a **new** key are refused with `429` (and `Retry-After` set to when the earliest counter expires) until counters expire. Existing counters are not reset or changed. The flood is visible as a burst of `rate_limited` log lines.
+- **Known trade-off for the production login fallback.** With production IP limiting disabled, the fallback login limiter (`LOGIN_FAILURE_NO_IP`) is keyed by email alone, and each failed login for a distinct email creates a counter that lives for the whole fallback window (60 minutes by default). A sufficiently large flood of distinct email addresses, on the order of `RATE_LIMIT_MAX_KEYS` failed attempts inside that window, could fill that store. New-email login attempts would then receive `429` responses until existing counters expire, potentially up to the 60-minute window. There is no application-level limit on how fast one address can do this while IP limiting is off. The behavior was chosen deliberately over evicting live counters, which would let the same flood erase active lockouts. It is a known limitation, not a report that the application is under attack. Raising `RATE_LIMIT_MAX_KEYS` raises the size of flood needed but does not remove the trade-off; bursts of `rate_limited` entries for limiter `loginFailureNoIp` are how to notice it.
+
+### Client IP handling and IP-based limits (disabled in production)
+
+**Decision: production IP-based rate limiting stays disabled, and `TRUST_PROXY_HOPS` must stay unset in production.** The code enforces the first part: production ignores `TRUST_PROXY_HOPS`. Account-based limits remain active and tested (see the table above).
+
+**How the code behaves**
+
+- The IP-keyed limiters (`LOGIN_IP`, `REGISTRATION`, `RESERVATION_IP`, `GENERAL_READ`) and the email-plus-IP `LOGIN_FAILURE` limiter run **only when `NODE_ENV` is exactly `development` or `test`** (case-sensitive). In production, with `NODE_ENV` unset, and with any other value (a typo such as `Production`, or `staging`) they are **off regardless of `TRUST_PROXY_HOPS`**, so a misconfiguration can never key every visitor to one shared address. Startup logs a warning when they are off. The account-keyed limiters are unaffected and stay active everywhere, and login failures use the per-email fallback described above.
+- `TRUST_PROXY_HOPS` is still parsed and validated (a whole number from 1 to 5; 0 is rejected at startup in production; `true`, subnets and names are rejected), so a malformed value fails startup. **Where IP-based limiting is off, production included, the value is ignored**: Express is not told to trust any proxy, and the startup warning says the value is being ignored. Only in development and test does it take effect, with Express taking the client address that many entries from the right of `X-Forwarded-For`. The code reads only Express's `req.ip` and never parses forwarded headers itself.
+- For local development, set `NODE_ENV=development` to exercise the IP-keyed limiters, which use the socket address. With `NODE_ENV` unset they are off.
+
+**Why it stays disabled: what was measured**
+
+Browser traffic reaches the API as Browser → Vercel `/api` rewrite → Render (behind Cloudflare) → Express ("path A"). Direct calls to the `onrender.com` URL skip Vercel ("path B"). A temporary diagnostic on 2026-11-06 (a throwaway Render service and Vercel project, since deleted; no verification task is outstanding) measured both paths on the Render free plan in Singapore: IPv4 only, four runs over about 15 minutes, from two networks.
+
+| | Path B: direct to Render | Path A: browser → Vercel → Render |
+| --- | --- | --- |
+| `X-Forwarded-For` seen by Express (socket is `127.0.0.1`) | client, Cloudflare edge, Render-internal address | first entry, Vercel egress address, Cloudflare edge, Render-internal address |
+| Infrastructure entries after the client | 2 (hop count **3**, counting the local socket hop) | 3 (a count of 4 would be needed to reach the first entry) |
+| A client-supplied `X-Forwarded-For` | stays to the left of the infrastructure entries | **sometimes kept in the first slot in place of the real client** (3 of 4 runs) and sometimes overwritten, so it is unreliable |
+
+What follows from that:
+
+- A hop count of **3 identifies the client only on path B**. On path A, where browsers go, it returns Vercel's egress address, so every visitor would share a handful of buckets and the site would throttle itself.
+- A larger count on path A would use the first slot, which a client can set (spoofable). A count larger than the real chain lets Express fall through to the left-most entry, which a client can set.
+- **No single `TRUST_PROXY_HOPS` value safely serves both paths. Do not set `TRUST_PROXY_HOPS=3`, or any other value, for the current Vercel-to-Render architecture.** The measured 3 describes path B only.
+
+Other behavior observed (the code does not rely on any of it): `X-Real-IP` was not forwarded; a client-supplied `CF-Connecting-IP` was rejected by Cloudflare with a 403; `True-Client-IP` was overwritten. On path A, Vercel's `X-Vercel-Forwarded-For` and `Forwarded` carried the real client and overwrote forged values in every run, but on path B a client can send both freely. These are observations, not platform guarantees, and they can change. IPv6 was not tested.
+
+**What this leaves unprotected in production:** credential stuffing across many different accounts from one address, registration floods (each costs a bcrypt hash), and public catalogue reads. Edge or provider protection (DDoS mitigation, a WAF, broad IP rate limiting) is the intended place for that and is not implemented.
+
+**Conditions required before IP-based limits can be enabled** (all of them):
+
+1. **A single trusted ingress.** For example, serve the API through a dedicated API domain that reaches Render directly, with no Vercel `/api` rewrite for browser traffic, so one chain applies to real users. The alternative is a separately designed and verified approach that proves a request came through Vercel before using a Vercel-set client address; that needs a code design that reads something other than `req.ip` and is not implemented.
+2. **Fresh measurements on the exact hostnames that will serve the API.** The results above do not cover a custom domain. Measure the chain, including forged-header tests, more than one network and IPv6, in a staging deployment using temporary resources, and delete those afterwards. If the `onrender.com` URL stays reachable alongside an API domain, measure that path too.
+3. **Only then** change the code to allow IP limiting in production (it deliberately ignores `TRUST_PROXY_HOPS` there today), set `TRUST_PROXY_HOPS` in the Render dashboard to the measured count, add it to `render.yaml`, and confirm with test accounts that two different clients get separate counters and that a forged `X-Forwarded-For` does not reset one.
+4. **Re-verify after any change** to hosting, proxies or the CDN, because these results show platform behavior can vary.
 
 ## Manual staging verification checklist
 
