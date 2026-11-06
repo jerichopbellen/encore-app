@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const { randomBytes, randomUUID } = require('node:crypto')
 const { Client } = require('../../server/node_modules/pg')
 const Stripe = require('../../server/node_modules/stripe')
-const { configureTestDatabase } = require('../helpers/testDatabase.cjs')
+const { configureTestDatabase, assertConnectedToIntegrationDatabase } = require('../helpers/testDatabase.cjs')
 
 // Configure Prisma before requiring the app: the ordinary server/.env is never
 // allowed to select a database for this suite.
@@ -18,6 +18,8 @@ process.env.STRIPE_SECRET_KEY = 'sk_test_integration_test_only_key'
 process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET
 process.env.FRONTEND_ORIGIN = 'http://localhost:5173'
 
+// Rate limits are raised for this suite only; see tests/helpers/rateLimitTestEnvironment.cjs.
+Object.assign(process.env, require('../helpers/rateLimitTestEnvironment.cjs').relaxedRateLimitEnvironment())
 const app = require('../../server/src/app')
 const { getPrismaClient, disconnectPrisma } = require('../../server/src/config/prisma')
 const { setGatewayForTests } = require('../../server/src/services/stripeGateway')
@@ -271,6 +273,8 @@ test('Stripe payment lifecycle against the dedicated PostgreSQL test database', 
   }
 
   try {
+    // Confirm what the connection actually reached before any read or write.
+    await assertConnectedToIntegrationDatabase(prisma)
     let existingRowCounts
     try {
       await prisma.$queryRaw`SELECT 1`

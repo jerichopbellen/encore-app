@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { randomBytes, randomUUID } = require('node:crypto')
 const { Client } = require('../../server/node_modules/pg')
-const { configureTestDatabase } = require('../helpers/testDatabase.cjs')
+const { configureTestDatabase, assertConnectedToIntegrationDatabase } = require('../helpers/testDatabase.cjs')
 const { releasePendingHolds } = require('../helpers/pendingHolds.cjs')
 
 // Configure Prisma before requiring the app: the ordinary server/.env is never
@@ -10,6 +10,11 @@ const { releasePendingHolds } = require('../helpers/pendingHolds.cjs')
 configureTestDatabase()
 // This suite covers simulated checkout; server/.env must never switch it to Stripe.
 process.env.PAYMENT_PROVIDER = 'simulated'
+// Match the other integration suites, CI and Playwright: the limiters and request logger read NODE_ENV
+// when the app loads, so it is set explicitly here instead of depending on the developer's shell or .env.
+process.env.NODE_ENV = 'test'
+// Rate limits are raised for this suite only; see tests/helpers/rateLimitTestEnvironment.cjs.
+Object.assign(process.env, require('../helpers/rateLimitTestEnvironment.cjs').relaxedRateLimitEnvironment())
 const app = require('../../server/src/app')
 const { getPrismaClient, disconnectPrisma } = require('../../server/src/config/prisma')
 
@@ -184,6 +189,8 @@ test('Encore backend behavior against the dedicated PostgreSQL test database', a
   }
 
   try {
+    // Confirm what the connection actually reached before any read or write.
+    await assertConnectedToIntegrationDatabase(prisma)
     // This read-only preflight fails clearly if the dedicated database is not prepared.
     let existingRowCounts
     try {

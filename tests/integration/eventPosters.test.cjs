@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { gzipSync } = require('node:zlib')
 const { randomBytes, randomUUID } = require('node:crypto')
-const { configureTestDatabase } = require('../helpers/testDatabase.cjs')
+const { configureTestDatabase, assertConnectedToIntegrationDatabase } = require('../helpers/testDatabase.cjs')
 
 // Configure Prisma before requiring the app: the ordinary server/.env is never
 // allowed to select a database for this suite.
@@ -19,6 +19,8 @@ process.env.CLOUDINARY_API_SECRET = CLOUDINARY_TEST_SECRET
 process.env.CLOUDINARY_POSTER_FOLDER = 'encore-test/event-posters'
 process.env.POSTER_UPLOAD_MAX_BYTES = '4096'
 
+// Rate limits are raised for this suite only; see tests/helpers/rateLimitTestEnvironment.cjs.
+Object.assign(process.env, require('../helpers/rateLimitTestEnvironment.cjs').relaxedRateLimitEnvironment())
 const app = require('../../server/src/app')
 const { getPrismaClient, disconnectPrisma } = require('../../server/src/config/prisma')
 const { setGatewayForTests } = require('../../server/src/services/cloudinaryGateway')
@@ -177,6 +179,8 @@ test('admin event posters against the dedicated PostgreSQL test database', async
   }
 
   try {
+    // Confirm what the connection actually reached before any read or write.
+    await assertConnectedToIntegrationDatabase(prisma)
     try {
       await prisma.$queryRaw`SELECT 1`
       const counts = await Promise.all([
