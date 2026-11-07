@@ -80,7 +80,10 @@ async function restoreInventoryForReservation(tx, reservationId) {
   }
 }
 
-async function expirePendingReservations(tx, now) {
+// `alsoLockTicketTypeIds` lets a caller that will need other tickets later in the same
+// transaction (cancellation) have them locked in this sweep's single sorted pass, so the
+// transaction never acquires ticket locks in two separately sorted batches.
+async function expirePendingReservations(tx, now, { alsoLockTicketTypeIds = [] } = {}) {
   const dueReservations = await tx.reservations.findMany({
     where: { status: 'pending', expires_at: { lte: now } },
     orderBy: { expires_at: 'asc' },
@@ -94,7 +97,10 @@ async function expirePendingReservations(tx, now) {
     select: { ticket_type_id: true },
   })
   // Lock every affected ticket in a single sorted order before changing holds.
-  await lockTicketTypes(tx, expiredItems.map((item) => item.ticket_type_id))
+  await lockTicketTypes(tx, [
+    ...expiredItems.map((item) => item.ticket_type_id),
+    ...alsoLockTicketTypeIds,
+  ])
 
   let expiredCount = 0
   for (let index = 0; index < dueReservations.length; index += EXPIRY_BATCH_SIZE) {
@@ -238,7 +244,17 @@ async function cancelReservation(userId, reservationId) {
   const now = new Date()
 
   const result = await prisma.$transaction(async (tx) => {
-    await expirePendingReservations(tx, now)
+    // Items never change after a reservation is created, so reading the caller's own
+    // tickets before locking is safe. Locking them together with the tickets of every
+    // due hold keeps one global ticket-lock order for the whole transaction; two
+    // cancellations whose sweeps see different due holds could otherwise deadlock.
+    const ownItems = await tx.reservation_items.findMany({
+      where: { reservation_id: reservationId, reservations: { user_id: userId } },
+      select: { ticket_type_id: true },
+    })
+    await expirePendingReservations(tx, now, {
+      alsoLockTicketTypeIds: ownItems.map((item) => item.ticket_type_id),
+    })
 
     const reservation = await tx.reservations.findFirst({
       where: { id: reservationId, user_id: userId },
