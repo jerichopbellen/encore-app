@@ -36,6 +36,7 @@ This personal portfolio project focuses on full-stack development, backend archi
 - **Prisma ORM 7** — database client and structured data access
 - **`@prisma/adapter-pg`** — PostgreSQL driver adapter for Prisma
 - **bcrypt** and **jsonwebtoken** — password hashing and signed session tokens (HTTP-only cookies)
+- **express-rate-limit** — Express-level request rate limiting
 - **Stripe Node SDK** — optional Stripe-hosted Checkout in test mode
 - **Cloudinary Node SDK** — optional server-side storage for admin-uploaded event posters
 - **dotenv** — environment variable management
@@ -84,7 +85,7 @@ The backend uses a layered architecture:
 - **Controllers** handle incoming requests and construct HTTP responses.
 - **Services** coordinate application logic, business rules, and Prisma database queries.
 - **Gateways** (`stripeGateway`, `cloudinaryGateway`) wrap third-party SDK calls so they can be replaced in tests.
-- **Middleware** handles CORS, same-origin checks on unsafe requests, authentication, authorization, request logging, poster upload parsing, and errors.
+- **Middleware** handles CORS, same-origin checks on unsafe requests, authentication, authorization, rate limiting, request logging, poster upload parsing, and errors.
 - **Validators** validate request parameters and payloads.
 - **Config and utilities** provide environment validation, payment and poster configuration, structured logging, and error helpers.
 
@@ -218,6 +219,7 @@ The following variables are optional:
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` — optional, set together to enable admin poster uploads (server-only).
 - `CLOUDINARY_POSTER_FOLDER` — Cloudinary Media Library folder and public ID prefix for posters; defaults to `encore/event-posters`.
 - `POSTER_UPLOAD_MAX_BYTES` — maximum poster size; defaults to 4 MB (4194304 bytes), at most 10 MB.
+- `RATE_LIMIT_<NAME>_MAX` and `RATE_LIMIT_<NAME>_WINDOW_MINUTES` — per-limiter overrides for the rate limits described under [Rate Limiting](#rate-limiting); `RATE_LIMIT_MAX_KEYS` caps the counters each limiter keeps in memory. `TRUST_PROXY_HOPS` only applies in development and test, and should stay unset in production. All of these have documented defaults in `server/.env.example`.
 
 The backend defaults to port `5000`, PostgreSQL uses port `5432`, and the Vite frontend typically uses port `5173`.
 
@@ -355,6 +357,8 @@ Events that have started cannot be reserved or checked out, but their public det
 | POST | `/api/reservations/:reservationId/cancel` | Cancel a pending reservation (authenticated) |
 | POST | `/api/reservations/:reservationId/checkout` | Confirm a simulated checkout and create a booking (authenticated; requires `Idempotency-Key`; simulated mode only) |
 
+To limit reservation abuse, one reservation may include at most 6 tickets (HTTP `400` above that), and an account may hold at most 2 unexpired pending reservations at a time (HTTP `409`). The pending-hold count is checked inside the reservation transaction after taking a `FOR NO KEY UPDATE` lock on the user's row, so concurrent requests from the same account cannot all slip past the limit. Confirmed, cancelled, and time-expired holds do not count.
+
 Reservation holds expire after 15 minutes. Expired holds are processed when relevant event or reservation endpoints are accessed; a separate background worker is not currently configured.
 
 Simulated checkout requires an `Idempotency-Key` header containing 8–255 ASCII letters, numbers, dots, underscores, tildes, or hyphens. The key is scoped to the authenticated user and checkout operation. Retrying the same key for the same reservation replays the original successful status and response body; using it for a different reservation returns HTTP 409. The client generates one UUID per checkout attempt and retains it in session storage until it receives a successful response, so it can recover if the server committed but the response was lost. The key and saved response commit in the same PostgreSQL transaction as the booking. Failed checkout attempts do not consume a key.
@@ -432,11 +436,21 @@ Checkout retries are safe: the same key replays the original result instead of c
 
 ### Security
 
-Passwords are hashed with bcrypt and sessions use signed, HTTP-only cookies. Admin authorization is enforced server-side using the current database role. Unsafe requests are checked against the exact allowed origin, request payloads are validated, uploads are verified by content, Stripe webhooks are verified by signature, and errors are returned without leaking internals.
+Passwords are hashed with bcrypt and sessions use signed, HTTP-only cookies. Admin authorization is enforced server-side using the current database role. Unsafe requests are checked against the exact allowed origin, sensitive endpoints are rate limited, request payloads are validated, uploads are verified by content, Stripe webhooks are verified by signature, and errors are returned without leaking internals.
+
+### Rate Limiting
+
+Express-level limits (`express-rate-limit`, with bounded in-memory counters) slow down brute-force and abuse. Limited requests return HTTP `429` through the normal error format with a `Retry-After` header, and each one is logged.
+
+- **Per account** (always on): reservation creation, attempts, cancellation and reads; checkout and payment initiation; payment cancellation; and admin poster upload/removal. Defaults are proposed tuning values, not product requirements.
+- **Per email** while IP limiting is off: a generous login-failure limit that unknown and registered emails hit identically.
+- **Per IP** (login, failed login by email + IP, registration, reservation backstop, and general reads): these run **only** when `NODE_ENV` is exactly `development` or `test`. Under the current Vercel-to-Render architecture no single `TRUST_PROXY_HOPS` value identifies clients safely in production, so IP-keyed limiters stay off there rather than risk putting every visitor in one shared bucket.
+
+Counters live in server memory, so they reset on restart and are not shared between instances. See [DEPLOYMENT.md](DEPLOYMENT.md) for the reasoning, proxy details, and tuning.
 
 ### Testing
 
-Unit, PostgreSQL integration, and browser tests cover successful requests, invalid inputs, missing records, inventory limits, reservation cancellation and expiration, duplicate requests, concurrent booking attempts, payment lifecycles, and poster handling. Integration tests run only against a dedicated, guarded test database and never against the development database.
+Unit, PostgreSQL integration, and browser tests cover successful requests, invalid inputs, missing records, inventory limits, reservation cancellation and expiration, duplicate requests, concurrent booking attempts, payment lifecycles, reservation limits, rate limiting, and poster handling. Integration tests run only against a dedicated, guarded test database and never against the development database.
 
 See [tests/README.md](tests/README.md) for the automated test commands, dedicated PostgreSQL test database setup, and fixture cleanup behavior.
 
