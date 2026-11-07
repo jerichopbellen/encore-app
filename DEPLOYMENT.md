@@ -17,9 +17,9 @@ The production frontend and API provider hostnames (`*.vercel.app` and `*.onrend
 2. From `server/`, run `npm ci`, `npx prisma generate --config prisma7.config.ts`, then `npm start`.
 3. From `client/`, run `npm ci` and `npm run dev`. When `VITE_API_BASE_URL` is blank, the existing Vite proxy sends `/api` to `http://localhost:5000`.
    Copy `client/.env.example` to `client/.env.local` only if you need to override the default; keep it blank for the normal local proxy workflow.
-4. Use the dedicated database setup in [tests/README.md](tests/README.md) for integration testing. Integration tests must use a database named with a distinct `test` segment; they never fall back to `DATABASE_URL`.
+4. Use the dedicated database setup in [tests/README.md](tests/README.md) for integration testing. Integration tests run only against the local database named exactly `encore_test` (from `TEST_DATABASE_URL` in `server/.env.test`); they never fall back to `DATABASE_URL`. Browser E2E tests use the separate local `encore_e2e_test` database.
 
-For a schema change, edit `server/prisma/schema.prisma`, create a migration from a disposable local development database with `npx prisma migrate dev --name <short_change_name> --config prisma7.config.ts`, review the generated SQL (including any required raw PostgreSQL constraints), and run the complete test suite. Never use `migrate dev`, `db push`, or seed commands against production.
+For a schema change, edit `server/prisma/schema.prisma`, create a migration from a disposable local development database with `npx prisma migrate dev --name <short_change_name> --config prisma7.config.ts`, review the generated SQL (including any required raw PostgreSQL constraints), and run the complete test suite. Test commands never apply migrations, so first run `npx prisma migrate deploy --config prisma7.config.ts` against `encore_test` (and `encore_e2e_test` before E2E), with both `DATABASE_URL` and `DIRECT_DATABASE_URL` set explicitly to that test database. Never use `migrate dev`, `db push`, or seed commands against production.
 
 ## Vercel frontend
 
@@ -89,7 +89,7 @@ Administrators can give an event a custom poster from the event create and edit 
 
 Create a Neon PostgreSQL project and database in the Neon console. Copy the **pooled** connection URL into Render's `DATABASE_URL` and the **direct** connection URL into `DIRECT_DATABASE_URL`. Both must point to the same intended Neon database and require TLS. The application keeps its current lazy Prisma singleton and uses the pooled URL; CLI commands use the direct URL when present. The pg adapter's pool is capped at 10 connections per Render process with a 5-second connection timeout. Size the Neon connection budget for the number of Render instances.
 
-The repository contains an initial Prisma migration at `server/prisma/migrations/20261017000000_initial_schema/migration.sql`. It creates the seven tables, foreign keys, unique indexes, and explicit SQL check constraints that are not represented in the Prisma model. The initial migration has been applied to the intended Neon staging database. It was also applied to the separately named local `encore_migration_test` database during the original migration setup; it was not applied to the existing development database.
+The repository contains an initial Prisma migration at `server/prisma/migrations/20261017000000_initial_schema/migration.sql`. It creates the seven tables, foreign keys, unique indexes, and explicit SQL check constraints that are not represented in the Prisma model. The initial migration has been applied to the intended Neon staging database. It was also applied to the separately named local `encore_migration_test` database during the original migration setup; it was not applied to the existing development database. In November 2026 `encore_migration_test` was brought up to date with every repository migration through `20261107000000_reservation_item_quantity_limit` using `migrate deploy`.
 
 For staging, use the automated release workflow described below. For a **new, empty database outside that automated staging flow** (for example, a separately provisioned production database), first take the required backup/recovery precautions, then from `server/` run:
 
@@ -104,6 +104,15 @@ The existing development database has no migration history. This initial migrati
 A read-only comparison of a copy of the local development database (October 2026) with this migration found these differences. Unique rules exist as constraints in the development database and as unique indexes in the migration, `created_at` defaults are `now()` versus `CURRENT_TIMESTAMP`, and several CHECK constraints have different names (`ticket_types_check` combines the two available-quantity checks). These are equivalent. The development database is looser in four places: `bookings_status_check` also allows `cancelled`, `events_status_check` also allows `cancelled`, and `ticket_types_price_check` and `reservation_items_unit_price_check` allow `0` where the migration requires a positive amount. No rows in that copy depended on the looser rules. The application already rejects zero prices, and a zero-amount Stripe payment attempt would be refused by `payment_attempts_amount_positive_check`. Decide whether to tighten the development database before baselining it.
 
 For future releases, review generated SQL and custom SQL constraints, apply the migration in staging, verify application behavior and inventory invariants, back up production, and then run `migrate deploy`. Prisma migrations do not supply an automatic rollback. For a failed release, stop rollout, inspect the migration and database state, then use a reviewed forward fix or restore from a verified backup/PITR plan. Do not blindly reverse SQL or reset a database.
+
+**`20261107000000_reservation_item_quantity_limit`**
+
+This migration replaces `reservation_items_quantity_positive_check` (`quantity > 0`) with `reservation_items_quantity_range_check` (`quantity BETWEEN 1 AND 6`). That gives the existing per-reservation ticket limit a database-level guarantee.
+
+- **Order:** the new constraint is added before the old one is dropped. If the `ADD` fails, the old constraint is untouched.
+- **Pre-check:** before applying it, confirm that `SELECT count(*) FROM reservation_items WHERE quantity > 6` returns `0` on the target database. A violating row makes the migration fail. Prisma then records it as failed in `_prisma_migrations`, and later `migrate deploy` runs stop until the rows are dealt with and the failure is deliberately resolved.
+- **Compatibility:** the backend already rejects quantities above 6, so the currently deployed version keeps working after the migration.
+- **Verification:** it was applied to the local `encore_migration_test` and `encore_test` databases. `pg_constraint` reported the new constraint as validated in both, and afterwards each of the five integration test files passed when run individually against `encore_test`.
 
 ## Automated Neon staging migration and Render release
 
@@ -265,3 +274,8 @@ Do not mark these complete until they have been performed against the deployed s
 - [ ] Oversized, SVG, and non-image uploads are rejected with clear messages.
 - [ ] Replaced and removed images disappear from the Cloudinary media library, and no `event_poster_cleanup_pending` warnings remain unresolved.
 - [ ] Cloudinary credentials appear only in Render settings, not in Vercel, the client build, or logs.
+
+### Reservation item quantity limit
+- [ ] `SELECT count(*) FROM reservation_items WHERE quantity > 6` returns `0` on the target database before release.
+- [ ] `20261107000000_reservation_item_quantity_limit` is applied, and `reservation_items_quantity_range_check` is present and validated while `reservation_items_quantity_positive_check` is gone.
+- [ ] Reserving six tickets succeeds and seven is rejected with the existing message through the deployed API.
