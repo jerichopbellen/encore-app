@@ -138,7 +138,7 @@ test('direct navigation to an account page redirects a signed-out visitor to log
   await page.goto('/account/reservations')
   expect((await sessionResponse).status()).toBe(401)
   await expect(page).toHaveURL(/\/login$/)
-  await expect(page.getByRole('heading', { name: 'Welcome back.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome back', level: 1 })).toBeVisible()
 })
 
 test('a signed-in customer is denied the admin event route', async ({ page }) => {
