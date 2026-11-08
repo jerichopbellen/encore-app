@@ -204,7 +204,7 @@ input:not([type=checkbox]):focus, select:focus, textarea:focus { border-color: v
 .reservation-panel__note-mark { color: var(--muted-strong); }
 
 /* Authentication and account. */
-.auth-page { width: min(100%, 500px); margin: 34px auto; padding: 16px 0 30px; }
+.auth-page { width: min(100%, 1040px); margin: 34px auto; }
 .auth-page > .eyebrow { margin-bottom: 15px; }
 .auth-page h1 { margin: 0 0 12px; font-size: clamp(2.8rem, 7vw, 4.2rem); line-height: .98; }
 .auth-page__intro, .auth-page__switch { color: var(--muted-strong); line-height: 1.6; }
@@ -729,7 +729,25 @@ input, select, textarea { accent-color: var(--burnt-orange); }
 .reservation-panel__success a, .reservation-panel__note a { color: var(--festival-orange); }
 
 /* Warm paper for account, reservation, checkout, and booking workflows. */
-.auth-page { border-top: 12px solid var(--festival-orange); background: var(--warm-white); padding: clamp(25px, 5vw, 48px); }
+/* Login and register: an editorial headline beside the form, split by a ticket-style perforation. */
+.auth-page { display: grid; width: 100%; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; gap: 0; margin: 0; padding-block: clamp(12px, 4vw, 56px); }
+.auth-page__poster { display: flex; align-self: stretch; flex-direction: column; gap: 28px; padding: clamp(8px, 2vw, 24px) clamp(32px, 5vw, 80px) clamp(8px, 2vw, 24px) 0; border-right: 2px dashed var(--line-strong); color: var(--ink); }
+.auth-page__poster-body { display: grid; gap: 26px; }
+.auth-page__poster-label { margin: 0; color: var(--burnt-orange); font-size: .72rem; font-weight: 800; letter-spacing: .12em; }
+.auth-page__poster-headline { max-width: 9ch; margin: 0; color: var(--ink); font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', 'Arial Black', sans-serif; font-size: clamp(3.2rem, 7vw, 6.2rem); font-weight: 800; letter-spacing: -.035em; line-height: .88; text-transform: uppercase; }
+.auth-page__poster-headline span { color: var(--burnt-orange); }
+.auth-page__benefits { display: grid; gap: 10px; margin: 0; padding: 0; color: var(--muted-strong); font-size: .95rem; line-height: 1.45; list-style: none; }
+.auth-page__benefits li { display: flex; align-items: baseline; gap: 10px; }
+.auth-page__benefits li::before { content: ''; flex: 0 0 auto; width: 9px; height: 9px; background: var(--festival-orange); transform: translateY(-1px); }
+.auth-page__poster-stub { margin: 0; color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .12em; }
+.auth-page__panel { width: 100%; max-width: 500px; align-self: center; padding: clamp(8px, 2vw, 24px) 0 clamp(8px, 2vw, 24px) clamp(32px, 5vw, 80px); }
+.auth-page .auth-page__panel h1 { margin: 0 0 8px; font-size: clamp(1.9rem, 2.6vw, 2.4rem); letter-spacing: -.02em; line-height: 1; }
+.auth-page__panel .auth-page__intro { margin: 0; }
+.auth-form__field { display: grid; gap: 7px; }
+.auth-form__label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.auth-form__label-row label { color: var(--ink); font-size: .85rem; font-weight: 750; }
+.auth-form__toggle { padding: 2px 0; border: 0; background: transparent; color: var(--muted-strong); font-size: .8rem; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.auth-form__toggle:hover { color: var(--burnt-orange); }
 .auth-page h1, .account-page__heading h1, .profile-page h1, .reservations-page__heading h1,
 .checkout-page__heading h1, .booking-confirmation h1 { color: var(--ink); font-size: clamp(3rem, 7vw, 5.4rem); font-weight: 900; line-height: .88; text-transform: uppercase; }
 .auth-page__intro, .auth-page__switch, .account-page__heading > p:last-child,
@@ -877,7 +895,12 @@ input, select, textarea { accent-color: var(--burnt-orange); }
   .account-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .account-nav a { min-height: 48px; padding: 8px; }
   .account-nav a small { display: none; }
-  .auth-page { margin-block: 12px; }
+  .auth-page { grid-template-columns: minmax(0, 1fr); padding-block: 0; }
+  .auth-page__poster { gap: 18px; padding: 0 0 28px; border-right: 0; }
+  .auth-page__poster-body { gap: 18px; }
+  .auth-page__poster-headline { max-width: none; font-size: clamp(2.6rem, 10vw, 3.8rem); }
+  .auth-page__poster-stub { display: none; }
+  .auth-page__panel { max-width: 560px; padding: 28px 0 0; border-top: 2px dashed var(--line-strong); }
 }
 @media (max-width: 560px) {
   .catalogue__intro { padding-bottom: 18px; }
@@ -891,7 +914,7 @@ input, select, textarea { accent-color: var(--burnt-orange); }
   .event-artwork { aspect-ratio: 4 / 2.8; }
   .event-artwork__title { max-width: 92%; font-size: clamp(2.2rem, 13cqi, 3.7rem); }
   .event-not-found h1 { font-size: clamp(2.8rem, 13vw, 4.5rem); }
-  .auth-page { padding: 24px 20px; }
+  .auth-page__benefits { display: none; }
   .reservation-card, .booking-list-card, .booking-card, .checkout-card { padding: 17px; }
   .reservation-panel__heading { align-items: flex-start; }
   .admin-dashboard__panel { padding: 17px; }
